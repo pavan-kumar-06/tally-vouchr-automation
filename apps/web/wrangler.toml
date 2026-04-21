@@ -1,0 +1,18 @@
+name = "vouchr-web"
+account_id = "627f168e835fb675f1c5be47f5763ffd"
+compatibility_date = "2026-04-18"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "vouchrit-db"
+database_id = "94af87cf-fa2d-4e65-b18b-e35442d1ac71"
+
+[[r2_buckets]]
+binding = "STATEMENT_BUCKET"
+bucket_name = "vouchrit-data"
+preview_bucket_name = "vouchrit-data-preview"
+
+[vars]
+BETTER_AUTH_URL = "http://localhost:3000"
+WORKER_BASE_URL = "http://localhost:8000"
