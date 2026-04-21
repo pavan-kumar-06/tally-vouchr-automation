@@ -21,13 +21,13 @@ export function CompanyBoard() {
     try {
       const [cmpRes, discRes] = await Promise.all([
         fetch("/api/companies"),
-        fetch("http://localhost:15000/companies").catch(() => null)
+        fetch("/api/connector/discovery").catch(() => null)
       ]);
-      setCompanies(await cmpRes.json());
-      
-      let discJson = [];
+      setCompanies(await cmpRes.json() as any[]);
+
+      let discJson: any[] = [];
       if (discRes && discRes.ok) {
-        discJson = await discRes.json();
+        discJson = await discRes.json() as any[];
       }
       setDiscovered(discJson);
     } catch (error) {
@@ -42,21 +42,49 @@ export function CompanyBoard() {
   }, [session]);
   
   const syncCompany = async (companyObj: any) => {
-    if (!companyObj.tallyCompanyRemoteId) return;
+    if (!companyObj.tallyCompanyRemoteId) {
+      toast.error("Company is not mapped to a Tally company yet");
+      return;
+    }
     setSyncingCompanyId(companyObj.id);
     try {
-        await fetch("http://localhost:15000/sync-now", { 
-            method: "POST", 
-            body: JSON.stringify({ tallyCompanyRemoteId: companyObj.tallyCompanyRemoteId }),
-            headers: { 'Content-Type': 'application/json' }
-        });
-        // Give it a short delay to simulate massive import and wait for completion
+      // Trigger sync via our API (which proxies to Python BE)
+      const triggerRes = await fetch("/api/connector/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId: companyObj.id,
+          orgId: companyObj.organizationId,
+          tallyRemoteId: companyObj.tallyCompanyRemoteId,
+        }),
+      });
+
+      if (!triggerRes.ok) {
+        throw new Error("Failed to trigger sync");
+      }
+
+      const { sync_id: syncId } = await triggerRes.json() as { sync_id: string };
+
+      // Poll for completion (max 30 seconds)
+      for (let i = 0; i < 15; i++) {
         await new Promise(resolve => setTimeout(resolve, 2000));
-        await fetchData();
+        const statusRes = await fetch(`/api/connector/status/${syncId}`);
+        const status = await statusRes.json() as { status: string; error?: string };
+
+        if (status.status === "COMPLETED") {
+          toast.success(`Masters synced successfully`);
+          await fetchData();
+          break;
+        } else if (status.status === "FAILED") {
+          toast.error(`Sync failed: ${status.error || "Unknown error"}`);
+          break;
+        }
+      }
     } catch(e) {
-        console.error("Sync failed", e);
+      console.error("Sync failed", e);
+      toast.error("Sync failed — make sure the connector is running");
     } finally {
-        setSyncingCompanyId(null);
+      setSyncingCompanyId(null);
     }
   };
 
@@ -75,7 +103,7 @@ export function CompanyBoard() {
         }),
       });
       if (res.ok) {
-        const json = await res.json();
+        const json = await res.json() as { id: string };
         await fetchData();
         if (tallyObj) {
             syncCompany({ id: json.id, tallyCompanyRemoteId: tallyObj.tallyCompanyRemoteId });
@@ -86,7 +114,7 @@ export function CompanyBoard() {
     }
   };
 
-  const [mappingModal, setMappingModal] = useState<{ isOpen: boolean; tallyObj?: any; type: 'new' | 'existing' }>({ isOpen: false });
+  const [mappingModal, setMappingModal] = useState<{ isOpen: boolean; tallyObj?: any; type: 'new' | 'existing' }>({ isOpen: false, type: 'new' });
   const [selectedCompanyId, setSelectedCompanyId] = useState("");
 
   if (isLoading) return <div className="flex justify-center p-12"><Loader2 className="animate-spin h-8 w-8 text-brand-600" /></div>;
@@ -111,7 +139,7 @@ export function CompanyBoard() {
                 }),
             });
             if (res.ok) {
-                setMappingModal({ isOpen: false });
+                setMappingModal({ isOpen: false } as any);
                 await fetchData();
                 syncCompany({ id: selectedCompanyId, tallyCompanyRemoteId: mappingModal.tallyObj.tallyCompanyRemoteId });
             } else {
@@ -123,7 +151,7 @@ export function CompanyBoard() {
     } else {
         // Add as New
         await createCompany(mappingModal.tallyObj);
-        setMappingModal({ isOpen: false });
+        setMappingModal({ isOpen: false } as any);
     }
   };
 
@@ -157,7 +185,7 @@ export function CompanyBoard() {
                         </p>
                         <div className="flex gap-3">
                             <Button className="w-full bg-brand-600 hover:bg-brand-700" onClick={handleMapSubmit}>Add as New</Button>
-                            <Button className="w-full" variant="outline" onClick={() => setMappingModal({ isOpen: false })}>Cancel</Button>
+                            <Button className="w-full" variant="secondary" onClick={() => setMappingModal({ isOpen: false } as any)}>Cancel</Button>
                         </div>
                     </>
                 ) : (
@@ -178,7 +206,7 @@ export function CompanyBoard() {
                         </select>
                         <div className="flex gap-3">
                             <Button className="w-full bg-brand-600 hover:bg-brand-700" onClick={handleMapSubmit}>Map Company</Button>
-                            <Button className="w-full" variant="outline" onClick={() => setMappingModal({ isOpen: false })}>Cancel</Button>
+                            <Button className="w-full" variant="secondary" onClick={() => setMappingModal({ isOpen: false } as any)}>Cancel</Button>
                         </div>
                     </>
                 )}
@@ -260,7 +288,7 @@ export function CompanyBoard() {
                         )}
                         <span>Last Synced on: {item.connectorLastSyncedAt ? new Date(item.connectorLastSyncedAt).toLocaleTimeString() : 'Never'}</span>
                      </p>
-                     <Badge variant="secondary" className="bg-green-50 text-green-700 border-green-100 h-5 text-[10px]">Active</Badge>
+                     <Badge tone="success" className="bg-green-50 text-green-700 border-green-100 h-5 text-[10px]">Active</Badge>
                   </div>
                   <p className="mt-2 text-lg font-bold text-slate-900 line-clamp-1" title={item.name}>{item.name}</p>
                   {item.tallyCompanyName ? (

@@ -98,53 +98,78 @@ func decodeTallyXML(body io.Reader, into any) error {
 	return xml.Unmarshal(sanitized, into)
 }
 
-func FetchMasters(ctx context.Context, tallyBaseURL, companyName string) ([]MasterEntry, error) {
+func FetchLedgers(ctx context.Context, tallyBaseURL, companyName string) ([]MasterEntry, error) {
 	masters := make([]MasterEntry, 0)
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, tallyBaseURL, bytes.NewBufferString(fmt.Sprintf(ledgersRequestXML, companyName)))
+	req.Header.Set("content-type", "application/xml")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("ledger request to Tally failed: %w", err)
+	}
+	defer resp.Body.Close()
 
-	// Fetch Ledgers
-	reqLedgers, _ := http.NewRequestWithContext(ctx, http.MethodPost, tallyBaseURL, bytes.NewBufferString(fmt.Sprintf(ledgersRequestXML, companyName)))
-	reqLedgers.Header.Set("content-type", "application/xml")
-	respL, err := http.DefaultClient.Do(reqLedgers)
-	if err == nil && respL.StatusCode < 300 {
-		var parsedL ledgersResponse
-		if err := decodeTallyXML(respL.Body, &parsedL); err != nil {
-			respL.Body.Close()
-			return nil, fmt.Errorf("failed to decode ledger XML: %w", err)
-		}
-		respL.Body.Close()
-		for _, l := range parsedL.Ledgers {
-			name := strings.TrimSpace(l.Name)
-			if name != "" && !isLogicalYes(l.IsDeleted) {
-				parent := strings.TrimSpace(l.Parent)
-				masters = append(masters, MasterEntry{
-					Name:             name,
-					Type:             "LEDGER",
-					Parent:           parent,
-					IsDeemedPositive: parseLogicalBoolPtr(l.IsDeemedPositive),
-				})
-			}
-		}
+	if resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("Tally returned %d for ledgers", resp.StatusCode)
 	}
 
-	// Fetch Voucher Types
-	reqVouchers, _ := http.NewRequestWithContext(ctx, http.MethodPost, tallyBaseURL, bytes.NewBufferString(fmt.Sprintf(voucherTypesRequestXML, companyName)))
-	reqVouchers.Header.Set("content-type", "application/xml")
-	respV, err := http.DefaultClient.Do(reqVouchers)
-	if err == nil && respV.StatusCode < 300 {
-		var parsedV vouchersResponse
-		if err := decodeTallyXML(respV.Body, &parsedV); err != nil {
-			respV.Body.Close()
-			return nil, fmt.Errorf("failed to decode voucher-type XML: %w", err)
-		}
-		respV.Body.Close()
-		for _, v := range parsedV.VoucherTypes {
-			if v.Name != "" {
-				masters = append(masters, MasterEntry{Name: v.Name, Type: "VOUCHER_TYPE"})
-			}
-		}
+	var parsed ledgersResponse
+	if err := decodeTallyXML(resp.Body, &parsed); err != nil {
+		return nil, fmt.Errorf("failed to decode ledger XML: %w", err)
 	}
 
+	for _, l := range parsed.Ledgers {
+		name := strings.TrimSpace(l.Name)
+		if name == "" || isLogicalYes(l.IsDeleted) {
+			continue
+		}
+		masters = append(masters, MasterEntry{
+			Name:             name,
+			Type:             "LEDGER",
+			Parent:           strings.TrimSpace(l.Parent),
+			IsDeemedPositive: parseLogicalBoolPtr(l.IsDeemedPositive),
+		})
+	}
 	return masters, nil
+}
+
+func FetchVoucherTypes(ctx context.Context, tallyBaseURL, companyName string) ([]MasterEntry, error) {
+	masters := make([]MasterEntry, 0)
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, tallyBaseURL, bytes.NewBufferString(fmt.Sprintf(voucherTypesRequestXML, companyName)))
+	req.Header.Set("content-type", "application/xml")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("voucher-type request to Tally failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("Tally returned %d for voucher types", resp.StatusCode)
+	}
+
+	var parsed vouchersResponse
+	if err := decodeTallyXML(resp.Body, &parsed); err != nil {
+		return nil, fmt.Errorf("failed to decode voucher-type XML: %w", err)
+	}
+
+	for _, v := range parsed.VoucherTypes {
+		name := strings.TrimSpace(v.Name)
+		if name != "" {
+			masters = append(masters, MasterEntry{Name: name, Type: "VOUCHER_TYPE"})
+		}
+	}
+	return masters, nil
+}
+
+func FetchMasters(ctx context.Context, tallyBaseURL, companyName string) ([]MasterEntry, error) {
+	ledgers, err := FetchLedgers(ctx, tallyBaseURL, companyName)
+	if err != nil {
+		return nil, err
+	}
+	vtypes, err := FetchVoucherTypes(ctx, tallyBaseURL, companyName)
+	if err != nil {
+		return nil, err
+	}
+	return append(ledgers, vtypes...), nil
 }
 
 func parseLogicalBoolPtr(v string) *bool {

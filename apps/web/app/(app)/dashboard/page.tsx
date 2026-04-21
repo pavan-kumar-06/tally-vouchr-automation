@@ -16,7 +16,7 @@ export default function DashboardPage() {
           <p className="text-sm text-slate-500">Manage your clients, automations, and Tally connectivity.</p>
         </div>
         <div className="flex gap-3">
-          <Button variant="outline" className="h-11 rounded-xl border-slate-200 px-6 font-semibold">
+          <Button variant="secondary" className="h-11 rounded-xl border-slate-200 px-6 font-semibold">
             <Download className="mr-2 h-4 w-4" /> Download Tally Connector
           </Button>
           <div className="h-11 w-11 rounded-full bg-brand-100 flex items-center justify-center text-brand-700 font-bold border-2 border-white shadow-soft">

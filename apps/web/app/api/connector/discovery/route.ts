@@ -69,8 +69,11 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // NOTE: connector stores all discoveries under VOUCHR_ORG_ID (hardcoded).
+  // For now, return all discoveries since this is a small-team SaaS.
+  // The mapped-companies table properly scopes by org for actual company data.
   const items = await db.query.tallyDiscovery.findMany({
-    where: eq(tallyDiscovery.organizationId, session.session.activeOrganizationId || "")
+    orderBy: (tallyDiscovery, { desc }) => [desc(tallyDiscovery.lastSeenAt)]
   });
   return NextResponse.json(items);
 }

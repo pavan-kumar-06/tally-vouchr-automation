@@ -110,6 +110,28 @@ export const tallyDiscovery = sqliteTable(
   })
 );
 
+export const pendingSync = sqliteTable(
+  "pending_syncs",
+  {
+    id: text("id").primaryKey(),
+    companyId: text("company_id").notNull().references(() => company.id, { onDelete: "cascade" }),
+    organizationId: text("organization_id").notNull(),
+    connectorId: text("connector_id").notNull(),
+    type: text("type", { enum: ["SYNC_MASTERS", "SEND_VOUCHERS"] }).notNull(),
+    status: text("status", { enum: ["PENDING", "COMPLETED", "FAILED"] }).notNull().default("PENDING"),
+    payload: text("payload"),  // JSON string with task details
+    result: text("result"),     // JSON string with connector's response
+    error: text("error"),
+    createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull()
+  },
+  (table) => ({
+    companyIdx: index("pending_syncs_company_idx").on(table.companyId),
+    connectorIdx: index("pending_syncs_connector_idx").on(table.connectorId),
+    statusIdx: index("pending_syncs_status_idx").on(table.status)
+  })
+);
+
 
 export const companyRelations = relations(company, ({ many, one }) => ({
   owner: one(user, {

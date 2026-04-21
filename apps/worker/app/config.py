@@ -17,7 +17,10 @@ class Settings(BaseSettings):
     r2_bucket_name: str = "vouchrit-data"
 
     web_internal_base_url: str = "http://localhost:3000"
+    web_public_base_url: str = "http://localhost:3000"
     worker_webhook_secret: str
+    connector_shared_token: str = "dev-connector-token-change-me"
+    jwt_secret: str = "CHANGE_ME_generate_32chars_random_string"
 
 
 settings = Settings()

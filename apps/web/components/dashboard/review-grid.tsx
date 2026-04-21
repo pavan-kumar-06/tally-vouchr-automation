@@ -23,6 +23,7 @@ import { Input } from "@/components/ui/input";
 import { toRupee } from "@/lib/utils";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
+import { SearchableSelect } from "./searchable-select";
 
 type Props = {
   companyId: string;
@@ -315,6 +316,25 @@ export function ReviewGrid({ companyId, statementId, entries, ledgers, bankLedge
 
   const { filter, sort, page, selected, bulkLedger, saving, rows, dirty, initialized } = state;
 
+  // Show toast when user picks a ledger for bulk update
+  const prevBulkLedger = useRef("");
+  useEffect(() => {
+    if (bulkLedger && bulkLedger !== prevBulkLedger.current) {
+      toast.success(`${selected.size} rows will be updated with ledger: ${bulkLedger}`);
+    }
+    prevBulkLedger.current = bulkLedger;
+  }, [bulkLedger, selected.size]);
+
+  // Track excluded rows for toast notification
+  const prevExcludedCount = useRef(rows.excluded.size);
+  useEffect(() => {
+    const curr = rows.excluded.size;
+    if (curr > prevExcludedCount.current) {
+      toast("Row excluded from export", { description: `${curr - prevExcludedCount.current} row(s) removed` });
+    }
+    prevExcludedCount.current = curr;
+  }, [rows.excluded.size]);
+
   const processedRows = useMemo(
     () => getFilteredSorted(rows.entries, rows.excluded, rows.ledgerMap, rows.voucherMap, filter, sort),
     [rows, filter, sort]
@@ -349,6 +369,7 @@ export function ReviewGrid({ companyId, statementId, entries, ledgers, bankLedge
         body: JSON.stringify({ entries: entriesToSave, extractionModel: "manual-review" })
       });
       if (!res.ok) throw new Error("Save failed");
+      toast.success("Changes saved successfully");
       dispatch({ type: "MARK_CLEAN" });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Save failed");
@@ -573,16 +594,13 @@ ${xmlEntries.join("\n")}
               {selected.size} Selected
             </span>
             <div className="flex items-center gap-2">
-              <select
-                className="h-10 rounded-lg border border-slate-200 bg-white px-4 text-sm text-slate-700 outline-none focus:border-brand-400 min-w-[220px]"
+              <SearchableSelect
                 value={bulkLedger}
-                onChange={(e) => dispatch({ type: "SET_BULK_LEDGER", ledger: e.target.value })}
-              >
-                <option value="">Select Ledger</option>
-                {ledgers.map((l) => (
-                  <option key={l} value={l}>{l}</option>
-                ))}
-              </select>
+                onChange={(val) => dispatch({ type: "SET_BULK_LEDGER", ledger: val })}
+                options={ledgers}
+                placeholder="Select Ledger"
+                className="min-w-[220px]"
+              />
               <Button
                 size="sm"
                 className="bg-brand-600 hover:bg-brand-700 h-10 px-6 text-sm font-semibold"
@@ -773,16 +791,12 @@ ${xmlEntries.join("\n")}
             {/* Ledger */}
             <div className="flex flex-col px-2 py-2 gap-1">
               <div className="text-xs">Ledger</div>
-              <select
-                className="h-7 rounded border border-slate-200 bg-white px-1 text-xs text-slate-600 outline-none focus:border-brand-400"
+              <SearchableSelect
                 value={filter.ledgerFilter}
-                onChange={(e) => dispatch({ type: "SET_FILTER", filter: { ledgerFilter: e.target.value }, autoSelect: true })}
-              >
-                <option value="">All</option>
-                {ledgers.map((l) => (
-                  <option key={l} value={l}>{l}</option>
-                ))}
-              </select>
+                onChange={(val) => dispatch({ type: "SET_FILTER", filter: { ledgerFilter: val }, autoSelect: false })}
+                options={ledgers}
+                placeholder="All"
+              />
             </div>
             {/* Status */}
             <div className="flex flex-col px-2 py-2 gap-1">
@@ -860,16 +874,12 @@ ${xmlEntries.join("\n")}
                     </div>
                     {/* Ledger */}
                     <div className="flex items-center px-2 py-3">
-                      <select
-                        className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-600 outline-none focus:border-brand-400"
+                      <SearchableSelect
                         value={ledger}
-                        onChange={(e) => dispatch({ type: "UPDATE_LEDGER", id: entry.row_id, ledger: e.target.value })}
-                      >
-                        <option value="">-- Select --</option>
-                        {ledgers.map((l) => (
-                          <option key={l} value={l}>{l}</option>
-                        ))}
-                      </select>
+                        onChange={(val) => dispatch({ type: "UPDATE_LEDGER", id: entry.row_id, ledger: val })}
+                        options={ledgers}
+                        placeholder="-- Select --"
+                      />
                     </div>
                     {/* Status */}
                     <div className="flex items-center px-2 py-3">

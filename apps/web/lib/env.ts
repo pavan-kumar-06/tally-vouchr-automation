@@ -12,6 +12,7 @@ const envSchema = z.object({
   WORKER_BASE_URL: z.string().url().default("http://localhost:8001"),
   CONNECTOR_SHARED_TOKEN: z.string().min(16).default("dev-connector-token-change-me"),
   WORKER_WEBHOOK_SECRET: z.string().min(16).default("dev-worker-secret-change-me"),
+  VOUCHR_WORKER_URL: z.string().url().default("http://localhost:8001").optional(),
   CLOUDFLARE_ACCOUNT_ID: z.string().optional(),
   CLOUDFLARE_DATABASE_ID: z.string().optional(),
   CLOUDFLARE_API_TOKEN: z.string().optional()
