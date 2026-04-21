@@ -27,7 +27,7 @@ export async function GET(request: Request) {
     }
   });
 
-  const remoteIds = mappedCompanies.map(c => c.tallyCompanyRemoteId).filter(Boolean) as string[];
+  const remoteIds = mappedCompanies.map((c: { tallyCompanyRemoteId: string | null }) => c.tallyCompanyRemoteId).filter(Boolean) as string[];
   
   console.log(`[mapped-companies] Found ${mappedCompanies.length} mapped companies:`, remoteIds);
 

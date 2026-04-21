@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { tallyDiscovery } from "@vouchr/db";
-import { eq, and } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { getEnv } from "@/lib/env";
 import { z } from "zod";
 
@@ -73,7 +73,7 @@ export async function GET() {
   // For now, return all discoveries since this is a small-team SaaS.
   // The mapped-companies table properly scopes by org for actual company data.
   const items = await db.query.tallyDiscovery.findMany({
-    orderBy: (tallyDiscovery, { desc }) => [desc(tallyDiscovery.lastSeenAt)]
+    orderBy: [desc(tallyDiscovery.lastSeenAt)]
   });
   return NextResponse.json(items);
 }

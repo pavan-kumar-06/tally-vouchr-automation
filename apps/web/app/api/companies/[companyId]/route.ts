@@ -48,7 +48,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ co
 
   const orgId = await getOrCreateOrgId(session);
   const resolvedParams = await params;
-  const { tallyCompanyName, tallyCompanyRemoteId } = await request.json();
+  const body = await request.json() as { tallyCompanyName?: string; tallyCompanyRemoteId?: string };
+  const { tallyCompanyName, tallyCompanyRemoteId } = body;
 
   await db
     .update(company)

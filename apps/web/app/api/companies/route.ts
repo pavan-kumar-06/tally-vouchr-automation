@@ -66,7 +66,8 @@ export async function POST(request: Request) {
   }
 
   const orgId = await getOrCreateOrgId(session);
-  const { name, tallyCompanyName, tallyCompanyRemoteId } = await request.json();
+  const body = await request.json() as { name?: string; tallyCompanyName?: string; tallyCompanyRemoteId?: string };
+  const { name, tallyCompanyName, tallyCompanyRemoteId } = body;
   const id = `cmp_${crypto.randomUUID().replaceAll("-", "")}`;
 
   await db.insert(company).values({
