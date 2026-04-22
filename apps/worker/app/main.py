@@ -7,6 +7,18 @@ from app.api_routes import router as api_router
 from app.auth_routes import router as auth_router
 from app.config import settings
 from app.middleware import JWTMiddleware
+from pydantic import BaseModel, Field
+import uuid
+import time
+
+class WaitlistCreateRequest(BaseModel):
+    email: str = Field(min_length=3)
+    name: str | None = None
+    company: str | None = None
+    role: str | None = None
+
+def now_unix() -> int:
+    return int(time.time())
 
 app = FastAPI(title="Vouchr API", version="0.2.0")
 
@@ -27,3 +39,22 @@ app.include_router(auth_router, prefix="/api/auth")
 
 # Business + connector + internal endpoints.
 app.include_router(api_router)
+
+# SUPPORT ALL POSSIBLE VARIATIONS TO PREVENT 404s
+@app.post("/api/waitlist")
+@app.post("/api/public/waitlist")
+@app.post("/public/waitlist")
+async def multi_path_waitlist_signup(payload: WaitlistCreateRequest):
+    """Direct route for waitlist that accepts multiple paths for resilience."""
+    from app.api_routes import db
+    try:
+        waitlist_id = f"wtl_{uuid.uuid4().hex[:12]}"
+        await db.execute(
+            "INSERT INTO waitlist (id, email, name, company, role, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            [waitlist_id, payload.email.strip().lower(), payload.name, payload.company, payload.role, now_unix()]
+        )
+        return {"ok": True}
+    except Exception as e:
+        if "UNIQUE" in str(e): return {"ok": True} # Already joined
+        print(f"Waitlist error: {e}")
+        return {"ok": False, "error": str(e)}
