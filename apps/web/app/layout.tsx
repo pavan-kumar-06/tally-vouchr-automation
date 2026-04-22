@@ -15,8 +15,8 @@ const sora = Sora({
 });
 
 export const metadata: Metadata = {
-  title: "Vouchr.it SaaS",
-  description: "High-throughput AI accounting pipeline for Tally"
+  title: "Accountant AI",
+  description: "Automate Tally Accounting with Intelligence"
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

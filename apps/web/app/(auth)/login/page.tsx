@@ -36,7 +36,7 @@ export default function LoginPage() {
       </section>
       <section className="grid place-items-center p-6">
         <div className="w-full max-w-[420px]">
-          <h1 className="font-heading text-4xl font-semibold text-slate-900">Log In to VouchrIt</h1>
+          <h1 className="font-heading text-4xl font-semibold text-slate-900">Log In to Accountant <span className="text-brand-600">AI</span></h1>
           <p className="mt-2 text-sm text-slate-500">Enter your credentials to access your dashboard</p>
 
           <form onSubmit={handleLogin} className="mt-8 space-y-4">
@@ -62,7 +62,7 @@ export default function LoginPage() {
                 required
               />
             </div>
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Button type="submit" className="w-full bg-slate-900 hover:bg-slate-800" disabled={loading}>
               {loading ? "Logging in..." : "Log In"}
             </Button>
           </form>
@@ -75,13 +75,6 @@ export default function LoginPage() {
               Forgot Password
             </Link>
           </div>
-
-          <p className="mt-8 text-center text-sm text-slate-500">
-            Don&apos;t have an account?{" "}
-            <Link href="/signup" className="text-brand-600 font-medium hover:underline">
-              Sign Up
-            </Link>
-          </p>
         </div>
       </section>
     </main>
