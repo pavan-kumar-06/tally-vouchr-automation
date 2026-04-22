@@ -399,8 +399,8 @@ export function ReviewGrid({ companyId, statementId, entries, ledgers, bankLedge
     let dateTo = "";
     if (rows.entries.length > 0) {
       const dates = rows.entries.map(e => e.date).sort();
-      dateFrom = dates[0];
-      dateTo = dates[dates.length - 1];
+      dateFrom = dates[0] ?? "";
+      dateTo = dates[dates.length - 1] ?? "";
     }
 
     return { total, resolved, pending, percent, dateFrom, dateTo };
@@ -629,7 +629,7 @@ ${xmlEntries.join("\n")}
 
                 <div className="text-slate-500 font-medium">Status</div>
                 <div className="col-span-2">
-                  <Badge variant="secondary" className="bg-brand-50 text-brand-700 border-brand-100 capitalize">
+                  <Badge tone="warning" className="bg-brand-50 text-brand-700 border-brand-100 capitalize">
                     {(status || "REVIEW").toLowerCase()}
                   </Badge>
                 </div>

@@ -29,8 +29,8 @@ export default async function BankingPage({ params }: { params: Promise<{ compan
   }
 
   const [statements, company] = await Promise.all([
-    statementsRes.json(),
-    companyRes.json()
+    statementsRes.json() as Promise<any[]>,
+    companyRes.json() as Promise<any>
   ]);
 
   const activeCount = statements.filter((s: any) => s.status !== "ARCHIVED" && s.status !== "DELETED").length;

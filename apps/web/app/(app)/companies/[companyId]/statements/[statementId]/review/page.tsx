@@ -27,7 +27,7 @@ export default async function ReviewPage({
     throw new Error(`Failed to load review context: ${res.statusText}`);
   }
 
-  const data = await res.json();
+  const data = await res.json() as any;
 
   return (
     <ReviewGrid
