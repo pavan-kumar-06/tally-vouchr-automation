@@ -173,20 +173,11 @@ class ProcessedWebhookPayload(BaseModel):
     entryCount: int = 0
     status: Literal["REVIEW", "FAILED", "SYNCED", "ARCHIVED", "DELETED", "PROCESSING", "UPLOADED"]
     processingError: str | None = None
-
-
 class ConnectorCompleteRequest(BaseModel):
     sync_id: str
     success: bool
     result: dict[str, Any] | None = None
     error: str | None = None
-
-
-class WaitlistCreateRequest(BaseModel):
-    email: str = Field(min_length=3)
-    name: str | None = None
-    company: str | None = None
-    role: str | None = None
 
 
 def _normalize_name(value: str) -> str:
@@ -253,32 +244,6 @@ async def _run_processing_background(statement_row: dict[str, Any], file_passwor
 async def health():
     return {"ok": True}
 
-
-@router.post("/api/public/waitlist")
-async def public_waitlist_signup(payload: WaitlistCreateRequest):
-    """Public endpoint to join the waitlist. Unauthenticated."""
-    try:
-        waitlist_id = f"wtl_{uuid.uuid4().hex[:12]}"
-        await db.execute(
-            """
-            INSERT INTO waitlist (id, email, name, company, role, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            [
-                waitlist_id,
-                payload.email.strip().lower(),
-                payload.name.strip() if payload.name else None,
-                payload.company.strip() if payload.company else None,
-                payload.role.strip() if payload.role else None,
-                now_unix(),
-            ],
-        )
-        return {"ok": True, "message": "Joined successfully"}
-    except Exception as e:
-        if "UNIQUE constraint" in str(e):
-            raise HTTPException(status_code=400, detail="Already on the waitlist")
-        print(f"Waitlist error: {e}")
-        raise HTTPException(status_code=500, detail="Failed to join waitlist")
 
 
 @router.get("/api/companies")
