@@ -1,6 +1,4 @@
 import { drizzle as drizzleD1 } from "drizzle-orm/sqlite-proxy";
-import { drizzle as drizzleLocal } from "drizzle-orm/better-sqlite3";
-import Database from "better-sqlite3";
 import * as schema from "@vouchr/db";
 import { getEnv } from "@/lib/env";
 
@@ -104,17 +102,30 @@ function getDatabase() {
     );
   }
 
-  // Fallback to Local SQLite (Better-SQLite3)
-  // This is essential for Build-time (Next.js pre-rendering) and local dev
+  // BUILD-SAFE FALLBACK:
+  // Instead of crashing on import (which kills 'next build'), we return a Proxy.
+  // This Proxy only throws an error when you actually try to perform a query.
   if (process.env.NODE_ENV !== "production" || process.env.VERBOSE_LOGS) {
-    console.log("🏡 LOCAL MODE: Using local SQLite (Better-SQLite3)");
+    console.warn("⚠️  DATABASE NOT CONFIGURED: Cloudflare D1 credentials missing.");
   }
 
-  const sqlite = new Database(env.DATABASE_URL.replace("file:", ""));
-  return drizzleLocal(sqlite, { schema });
+  return new Proxy({} as any, {
+    get(_, prop) {
+      return () => {
+        throw new Error(
+          `🔴 Database Error: You tried to access 'db.${String(prop)}', but Cloudflare D1 is not configured. ` +
+          "Check your .env file for CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_DATABASE_ID, and CLOUDFLARE_API_TOKEN."
+        );
+      };
+    }
+  });
 }
 
 export const db = globalForDb.db ?? getDatabase();
+
+if (process.env.NODE_ENV !== "production") {
+  globalForDb.db = db;
+}
 
 if (process.env.NODE_ENV !== "production") {
   globalForDb.db = db;

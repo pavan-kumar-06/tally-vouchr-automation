@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+export const dynamic = "force-dynamic";
 import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { tallyMaster } from "@vouchr/db";

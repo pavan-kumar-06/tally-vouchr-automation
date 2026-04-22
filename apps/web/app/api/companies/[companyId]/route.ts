@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+export const dynamic = "force-dynamic";
 import { db } from "@/lib/db";
 import { member, organization, company } from "@vouchr/db";
 import { eq, and } from "drizzle-orm";
