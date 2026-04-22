@@ -1,4 +1,6 @@
-import { drizzle } from "drizzle-orm/sqlite-proxy";
+import { drizzle as drizzleD1 } from "drizzle-orm/sqlite-proxy";
+import { drizzle as drizzleLocal } from "drizzle-orm/better-sqlite3";
+import Database from "better-sqlite3";
 import * as schema from "@vouchr/db";
 import { getEnv } from "@/lib/env";
 
@@ -85,9 +87,11 @@ function getDatabase() {
   const hasD1Config = Boolean(env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_DATABASE_ID && env.CLOUDFLARE_API_TOKEN);
 
   if (hasD1Config) {
-    console.log("☁️  CLOUD MODE: Using Cloudflare D1 via HTTP API");
+    if (process.env.NODE_ENV !== "production" || process.env.VERBOSE_LOGS) {
+      console.log("☁️  CLOUD MODE: Using Cloudflare D1 via HTTP API");
+    }
 
-    return drizzle(
+    return drizzleD1(
       async (sql, params, method) => executeD1Sql(sql, params, method),
       async (batch) => {
         const results: Array<{ rows: any[] }> = [];
@@ -100,9 +104,14 @@ function getDatabase() {
     );
   }
 
-  throw new Error(
-    "Cloudflare D1 credentials missing. Set CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_DATABASE_ID, CLOUDFLARE_API_TOKEN."
-  );
+  // Fallback to Local SQLite (Better-SQLite3)
+  // This is essential for Build-time (Next.js pre-rendering) and local dev
+  if (process.env.NODE_ENV !== "production" || process.env.VERBOSE_LOGS) {
+    console.log("🏡 LOCAL MODE: Using local SQLite (Better-SQLite3)");
+  }
+
+  const sqlite = new Database(env.DATABASE_URL.replace("file:", ""));
+  return drizzleLocal(sqlite, { schema });
 }
 
 export const db = globalForDb.db ?? getDatabase();
