@@ -180,6 +180,13 @@ class ConnectorCompleteRequest(BaseModel):
     error: str | None = None
 
 
+class WaitlistCreateRequest(BaseModel):
+    email: str = Field(min_length=3)
+    name: str | None = None
+    company: str | None = None
+    role: str | None = None
+
+
 def _normalize_name(value: str) -> str:
     return value.strip().upper().replace("\t", " ").replace("  ", " ")
 
@@ -243,6 +250,30 @@ async def _run_processing_background(statement_row: dict[str, Any], file_passwor
 @router.get("/health")
 async def health():
     return {"ok": True}
+
+
+@router.post("/api/waitlist")
+async def waitlist_signup(payload: WaitlistCreateRequest):
+    """Public endpoint to join the waitlist. Unauthenticated."""
+    try:
+        waitlist_id = f"wtl_{uuid.uuid4().hex[:12]}"
+        await db.execute(
+            "INSERT INTO waitlist (id, email, name, company, role, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            [
+                waitlist_id,
+                payload.email.strip().lower(),
+                payload.name.strip() if payload.name else None,
+                payload.company.strip() if payload.company else None,
+                payload.role.strip() if payload.role else None,
+                now_unix(),
+            ],
+        )
+        return {"ok": True}
+    except Exception as e:
+        if "UNIQUE" in str(e):
+            return {"ok": True}
+        print(f"Waitlist error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to join waitlist")
 
 
 
