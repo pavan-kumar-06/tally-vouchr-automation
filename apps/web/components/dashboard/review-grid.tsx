@@ -13,7 +13,11 @@ import {
   Trash2,
   X,
   FileSpreadsheet,
-  FileCode
+  FileCode,
+  Edit2,
+  Check,
+  Calendar,
+  FileText
 } from "lucide-react";
 import type { StatementEntry } from "@vouchr/contracts";
 import { Button } from "@/components/ui/button";
@@ -24,6 +28,7 @@ import { toRupee } from "@/lib/utils";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import { SearchableSelect } from "./searchable-select";
+import { api } from "@/lib/api-client";
 
 type Props = {
   companyId: string;
@@ -31,6 +36,8 @@ type Props = {
   entries: StatementEntry[];
   ledgers: string[];
   bankLedgerName?: string | null;
+  filename?: string | null;
+  status?: string | null;
   companyName?: string;
   tallyRemoteId?: string;
   voucherTypes?: readonly string[];
@@ -90,7 +97,8 @@ type Action =
   | { type: "UPDATE_VOUCHER"; id: string; voucher: StatementEntry["voucher_type"] }
   | { type: "SET_SAVING"; saving: boolean }
   | { type: "MARK_CLEAN" }
-  | { type: "RESET" };
+  | { type: "RESET" }
+  | { type: "UPDATE_BANK_LEDGER"; name: string };
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
@@ -123,21 +131,17 @@ function reducer(state: State, action: Action): State {
         };
       }
 
-      // Select all visible rows when filter changes
-      const visibleIds = state.rows.entries
-        .filter((e) => !state.rows.excluded.has(e.row_id))
-        .filter((e) => {
-          if (newFilter.narrationFilter && !(e.narration?.toLowerCase().includes(newFilter.narrationFilter.toLowerCase()))) return false;
-          if (newFilter.drCrFilter !== "ALL" && e.type !== newFilter.drCrFilter) return false;
-          if (newFilter.voucherFilter && (state.rows.voucherMap[e.row_id] ?? e.voucher_type) !== newFilter.voucherFilter) return false;
-          if (newFilter.statusFilter === "PENDING" && state.rows.ledgerMap[e.row_id]) return false;
-          if (newFilter.statusFilter === "RESOLVED" && !state.rows.ledgerMap[e.row_id]) return false;
-          if (newFilter.ledgerFilter && state.rows.ledgerMap[e.row_id] !== newFilter.ledgerFilter) return false;
-          if (newFilter.dateFrom && e.date < newFilter.dateFrom) return false;
-          if (newFilter.dateTo && e.date > newFilter.dateTo) return false;
-          return true;
-        })
-        .map((e) => e.row_id);
+      // Select only the first page's visible rows when filter changes (user requested page-based selection)
+      const sortedRows = getFilteredSorted(
+        state.rows.entries,
+        state.rows.excluded,
+        state.rows.ledgerMap,
+        state.rows.voucherMap,
+        newFilter,
+        state.sort
+      );
+      const visibleIds = sortedRows.slice(0, PAGE_SIZE).map((e) => e.row_id);
+
       return {
         ...state,
         filter: newFilter,
@@ -212,6 +216,9 @@ function reducer(state: State, action: Action): State {
     case "MARK_CLEAN":
       return { ...state, dirty: false };
 
+    case "UPDATE_BANK_LEDGER":
+      return { ...state, dirty: true };
+
     case "RESET":
       return {
         ...state,
@@ -229,6 +236,46 @@ function reducer(state: State, action: Action): State {
     default:
       return state;
   }
+}
+
+function DonutChart({ percent, size = 60 }: { percent: number; size?: number }) {
+  const strokeWidth = 8;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference - (percent / 100) * circumference;
+
+  return (
+    <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
+      <svg className="transform -rotate-90" width={size} height={size}>
+        {/* Background circle */}
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke="currentColor"
+          strokeWidth={strokeWidth}
+          fill="transparent"
+          className="text-slate-100"
+        />
+        {/* Progress circle */}
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke="currentColor"
+          strokeWidth={strokeWidth}
+          fill="transparent"
+          strokeDasharray={circumference}
+          style={{ strokeDashoffset }}
+          strokeLinecap="round"
+          className="text-emerald-500 transition-all duration-500 ease-in-out"
+        />
+      </svg>
+      <div className="absolute flex flex-col items-center justify-center text-[10px] font-bold text-slate-700">
+        {Math.round(percent)}%
+      </div>
+    </div>
+  );
 }
 
 function getFilteredSorted(
@@ -291,9 +338,10 @@ const initialState: State = {
   initialized: false
 };
 
-export function ReviewGrid({ companyId, statementId, entries, ledgers, bankLedgerName, companyName, tallyRemoteId, voucherTypes = DEFAULT_VOUCHERS }: Props) {
+export function ReviewGrid({ companyId, statementId, entries, ledgers, bankLedgerName: initialBankLedger, filename, status, companyName, tallyRemoteId, voucherTypes = DEFAULT_VOUCHERS }: Props) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const [exportOpen, setExportOpen] = useState(false);
+  const bankLedger = initialBankLedger || "";
 
   useEffect(() => {
     if (entries && entries.length > 0) {
@@ -340,6 +388,24 @@ export function ReviewGrid({ companyId, statementId, entries, ledgers, bankLedge
     [rows, filter, sort]
   );
 
+  const stats = useMemo(() => {
+    const total = rows.entries.length;
+    const resolved = Object.values(rows.ledgerMap).filter(Boolean).length;
+    const pending = total - resolved;
+    const percent = total > 0 ? (resolved / total) * 100 : 0;
+    
+    // Date range
+    let dateFrom = "";
+    let dateTo = "";
+    if (rows.entries.length > 0) {
+      const dates = rows.entries.map(e => e.date).sort();
+      dateFrom = dates[0];
+      dateTo = dates[dates.length - 1];
+    }
+
+    return { total, resolved, pending, percent, dateFrom, dateTo };
+  }, [rows]);
+
   const totalRows = processedRows.length;
   const totalPages = Math.max(1, Math.ceil(totalRows / PAGE_SIZE));
   const pageRows = processedRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -363,12 +429,7 @@ export function ReviewGrid({ companyId, statementId, entries, ledgers, bankLedge
         voucher_type: rows.voucherMap[e.row_id],
         excluded: rows.excluded.has(e.row_id)
       }));
-      const res = await fetch(`/api/statements/${statementId}/entries`, {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ entries: entriesToSave, extractionModel: "manual-review" })
-      });
-      if (!res.ok) throw new Error("Save failed");
+      await api.putStatementEntries(statementId, entriesToSave, "manual-review");
       toast.success("Changes saved successfully");
       dispatch({ type: "MARK_CLEAN" });
     } catch (e) {
@@ -437,7 +498,7 @@ export function ReviewGrid({ companyId, statementId, entries, ledgers, bankLedge
       // Tally date format: YYYYMMDD
       const dateStr = e.date.replace(/-/g, "");
       const isDebitInStatement = e.type === "DEBIT"; // Money going OUT usually
-      const bankLedger = bankLedgerName || "Bank Account";
+      const bankLedgerValue = bankLedger || "Bank Account";
 
       // TALLY SIGN CONVENTION:
       // DEBIT: ISDEEMEDPOSITIVE = Yes, AMOUNT = -ve
@@ -469,7 +530,7 @@ export function ReviewGrid({ companyId, statementId, entries, ledgers, bankLedge
             <AMOUNT>${partyAmount.toFixed(2)}</AMOUNT>
           </ALLLEDGERENTRIES.LIST>
           <ALLLEDGERENTRIES.LIST>
-            <LEDGERNAME>${escapeXml(bankLedger)}</LEDGERNAME>
+            <LEDGERNAME>${escapeXml(bankLedgerValue)}</LEDGERNAME>
             <ISDEEMEDPOSITIVE>${bankIsDeemedPositive}</ISDEEMEDPOSITIVE>
             <ISPARTYLEDGER>Yes</ISPARTYLEDGER>
             <AMOUNT>${bankAmount.toFixed(2)}</AMOUNT>
@@ -514,7 +575,7 @@ ${xmlEntries.join("\n")}
     URL.revokeObjectURL(url);
     toast.success(`Exported ${entriesToExport.length} vouchers to Tally XML`);
     setExportOpen(false);
-  }, [rows, statementId, bankLedgerName, companyName]);
+  }, [rows, statementId, bankLedger, companyName]);
 
   function escapeXml(str: string): string {
     return str
@@ -539,17 +600,86 @@ ${xmlEntries.join("\n")}
   }
 
   return (
-    <div className="space-y-3">
-      {/* Header */}
+    <div className="space-y-4">
+      {/* Document Information Card */}
+      <Card className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-soft">
+        <CardContent className="p-0">
+          <div className="grid grid-cols-1 md:grid-cols-12">
+            {/* Left Section: Details */}
+            <div className="md:col-span-7 p-6 space-y-4 border-r border-slate-100">
+              <div className="flex items-center gap-2 text-slate-400 mb-2">
+                <FileText className="h-4 w-4" />
+                <span className="text-xs font-bold uppercase tracking-wider">Document Information</span>
+              </div>
+              
+              <div className="grid grid-cols-3 gap-y-4 text-sm">
+                <div className="text-slate-500 font-medium">File Name</div>
+                <div className="col-span-2 text-slate-900 font-semibold break-all">{filename || "N/A"}</div>
+
+                <div className="text-slate-500 font-medium">Bank Ledger</div>
+                <div className="col-span-2">
+                  <span className="text-brand-600 font-bold uppercase">{bankLedger || "Not Selected"}</span>
+                </div>
+
+                <div className="text-slate-500 font-medium">Date Period</div>
+                <div className="col-span-2 text-slate-700 flex items-center gap-2">
+                  <Calendar className="h-3.5 w-3.5 text-slate-400" />
+                  <span>{stats.dateFrom || "..."} — {stats.dateTo || "..."}</span>
+                </div>
+
+                <div className="text-slate-500 font-medium">Status</div>
+                <div className="col-span-2">
+                  <Badge variant="secondary" className="bg-brand-50 text-brand-700 border-brand-100 capitalize">
+                    {(status || "REVIEW").toLowerCase()}
+                  </Badge>
+                </div>
+              </div>
+            </div>
+
+            {/* Right Section: Stats & Progress */}
+            <div className="md:col-span-5 p-6 bg-slate-50/50 flex items-center justify-around">
+              <div className="flex-shrink-0">
+                <DonutChart percent={stats.percent} size={100} />
+              </div>
+              
+              <div className="space-y-4 min-w-[120px]">
+                <div className="flex flex-col">
+                  <div className="flex items-center justify-between gap-8">
+                    <span className="text-slate-500 text-sm font-medium">Pending</span>
+                    <span className="text-slate-900 font-bold text-lg">{stats.pending}</span>
+                  </div>
+                  <div className="h-1 w-full bg-slate-200 rounded-full mt-1 overflow-hidden">
+                    <div className="h-full bg-amber-400" style={{ width: `${100 - stats.percent}%` }} />
+                  </div>
+                </div>
+
+                <div className="flex flex-col">
+                  <div className="flex items-center justify-between gap-8">
+                    <span className="text-slate-500 text-sm font-medium">Resolved</span>
+                    <span className="text-slate-900 font-bold text-lg">{stats.resolved}</span>
+                  </div>
+                  <div className="h-1 w-full bg-slate-200 rounded-full mt-1 overflow-hidden">
+                    <div className="h-full bg-emerald-500" style={{ width: `${stats.percent}%` }} />
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-slate-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400 text-xs font-bold uppercase">Total</span>
+                    <span className="text-slate-900 font-bold">{stats.total}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Grid Controls */}
       <Card className="rounded-xl border-slate-200">
         <CardContent className="flex items-center justify-between p-4">
           <div>
-            {bankLedgerName && (
-              <span className="rounded-full bg-brand-50 px-3 py-1 text-sm font-semibold text-brand-600">
-                {bankLedgerName}
-              </span>
-            )}
-            <h1 className="mt-1 font-heading text-xl font-bold text-slate-900">Review Transactions</h1>
+            <h1 className="font-heading text-xl font-bold text-slate-900">Review Transactions</h1>
           </div>
           <div className="flex items-center gap-3 relative" ref={exportRef}>
             <Button variant="secondary" size="sm" onClick={() => dispatch({ type: "RESET" })} disabled={!dirty || saving}>
@@ -576,8 +706,15 @@ ${xmlEntries.join("\n")}
                 </button>
               </div>
             )}
-            <Button size="sm" onClick={handleSave} disabled={!dirty || saving}>
-              {saving ? "Saving..." : "Save"}
+            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 shadow-sm transition-all hover:scale-[1.02]" onClick={handleSave} disabled={!dirty || saving}>
+              {saving ? (
+                <>
+                  <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  Saving...
+                </>
+              ) : (
+                "Save Changes"
+              )}
             </Button>
             <Button size="sm" className="bg-brand-600 hover:bg-brand-700" disabled={pendingCount > 0}>
               Send to Tally
@@ -643,7 +780,7 @@ ${xmlEntries.join("\n")}
                 else p = page - 2 + i;
                 return (
                   <button
-                    key={p}
+                    key={`page-${p}`}
                     onClick={() => dispatch({ type: "SET_PAGE", page: p })}
                     className={`h-8 w-8 rounded text-sm font-medium ${
                       page === p ? "bg-brand-600 text-white" : "text-slate-500 hover:bg-slate-100"
@@ -924,7 +1061,7 @@ ${xmlEntries.join("\n")}
                 else p = page - 2 + i;
                 return (
                   <button
-                    key={p}
+                    key={`page-${p}`}
                     onClick={() => dispatch({ type: "SET_PAGE", page: p })}
                     className={`h-8 w-8 rounded text-sm font-medium ${
                       page === p ? "bg-brand-600 text-white" : "text-slate-500 hover:bg-slate-100"

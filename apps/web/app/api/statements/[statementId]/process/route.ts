@@ -83,9 +83,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ sta
   const workerUrl = `${env.WORKER_BASE_URL}/v1/process-statement`;
   console.log(`[api/process] Forwarding to Python worker at: ${workerUrl}`);
 
+  // Build cookie header from the browser's cookie header (includes vouchr_access JWT)
+  const cookieHeader = (request.headers.get("cookie") ?? "");
+
   const response = await fetch(workerUrl, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(cookieHeader ? { Cookie: cookieHeader } : {}),
+    },
     body: JSON.stringify({
       statement_id: statementEntity.id,
       company_id: statementEntity.companyId,

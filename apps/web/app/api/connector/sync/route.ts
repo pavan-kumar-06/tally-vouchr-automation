@@ -14,6 +14,7 @@ export async function POST(request: Request) {
   // Forward to Python Worker BE
   const workerUrl = `${env.WORKER_BASE_URL}/v1/connector/sync-masters`;
 
+  // Forward cookies from the browser's request
   const cookieHeader = request.headers.get("cookie") || "";
 
   let res;

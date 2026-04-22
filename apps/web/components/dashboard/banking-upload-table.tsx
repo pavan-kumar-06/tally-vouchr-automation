@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { StatementUploader } from "./statement-uploader";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { api } from "@/lib/api-client";
 import type { statement } from "@vouchr/db";
 
 type Statement = typeof statement.$inferSelect;
@@ -52,12 +53,7 @@ export function BankingUploadTable({ companyId, initialStatements }: BankingUplo
     if (busyId) return;
     setBusyId(statementId);
     try {
-      const res = await fetch(`/api/statements/${statementId}/archive`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ archived })
-      });
-      if (!res.ok) throw new Error("Failed to update statement archive status");
+      await api.archiveStatement(statementId, archived);
       router.refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed");
@@ -80,10 +76,7 @@ export function BankingUploadTable({ companyId, initialStatements }: BankingUplo
     if (busyId) return;
     setBusyId(statementId);
     try {
-      const res = await fetch(`/api/statements/${statementId}/archive`, {
-        method: "DELETE"
-      });
-      if (!res.ok) throw new Error("Failed to delete statement");
+      await api.deleteStatement(statementId);
       router.refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed");
@@ -96,15 +89,7 @@ export function BankingUploadTable({ companyId, initialStatements }: BankingUplo
     if (busyId) return;
     setBusyId(statementId);
     try {
-      const res = await fetch(`/api/statements/${statementId}/process`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({})
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || "Failed to start reprocessing");
-      }
+      await api.processStatement(statementId);
       router.refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed");
@@ -270,7 +255,7 @@ export function BankingUploadTable({ companyId, initialStatements }: BankingUplo
                 }
                 return (
                   <button
-                    key={p}
+                    key={`page-${p}`}
                     onClick={() => setPage(p)}
                     className={`h-7 w-7 rounded text-xs font-medium ${
                       page === p ? "bg-brand-600 text-white" : "text-slate-500 hover:bg-slate-100"
@@ -306,6 +291,11 @@ export function BankingUploadTable({ companyId, initialStatements }: BankingUplo
 function renderStatusAction(row: Statement, companyId: string, busy: boolean, onReprocess: () => void) {
   switch (row.status) {
     case "UPLOADED":
+      return (
+        <Button size="sm" className="bg-brand-600 hover:bg-brand-700 h-7 px-2 text-xs" disabled={busy} onClick={onReprocess}>
+          Process
+        </Button>
+      );
     case "PROCESSING":
       return (
         <Badge tone="warning" className="bg-amber-50 text-amber-700 border-amber-100 animate-pulse text-xs">
