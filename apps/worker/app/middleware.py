@@ -24,6 +24,7 @@ PUBLIC_PATHS = {
     "/api/auth/refresh",
     "/api/auth/me",
     "/api/auth/health",
+    "/api/public/waitlist",
     "/v1/auth/link-session",
     "/v1/auth/refresh",
     "/v1/auth/logout",

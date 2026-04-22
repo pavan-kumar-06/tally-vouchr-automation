@@ -254,7 +254,7 @@ async def health():
     return {"ok": True}
 
 
-@router.post("/public/waitlist")
+@router.post("/api/public/waitlist")
 async def public_waitlist_signup(payload: WaitlistCreateRequest):
     """Public endpoint to join the waitlist. Unauthenticated."""
     try:
