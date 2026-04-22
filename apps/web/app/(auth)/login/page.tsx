@@ -67,14 +67,6 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          <div className="mt-4 flex justify-between text-sm">
-            <Link href="#" className="text-brand-600 hover:underline">
-              Log in with OTP
-            </Link>
-            <Link href="#" className="text-brand-600 hover:underline">
-              Forgot Password
-            </Link>
-          </div>
         </div>
       </section>
     </main>

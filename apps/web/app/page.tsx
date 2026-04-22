@@ -74,7 +74,7 @@ export default async function MarketingHomePage() {
         </section>
 
         <footer className="mt-40 border-t border-slate-200 py-12 text-center text-slate-500">
-          <p className="text-sm">© 2026 Accountant AI. Built by Vouchr.</p>
+          <p className="text-sm">© 2026 Accountant AI. Built with ❤️ from Bangalore</p>
         </footer>
       </div>
     </main>

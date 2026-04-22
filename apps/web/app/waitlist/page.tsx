@@ -35,7 +35,7 @@ export default function WaitlistPage() {
         </div>
 
         <footer className="mt-24 text-center text-sm text-slate-400">
-          <p>© 2026 Accountant AI. Built for the future of finance.</p>
+          <p>© 2026 Accountant AI. Built with ❤️ from Bangalore</p>
         </footer>
       </div>
     </main>

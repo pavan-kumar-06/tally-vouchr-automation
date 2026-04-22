@@ -35,14 +35,14 @@ export default function SignupPage() {
     <main className="grid min-h-screen grid-cols-1 md:grid-cols-2 bg-white">
       <section className="hidden md:grid place-items-center border-r border-slate-100 bg-[#f8f7ff]">
         <div className="h-[520px] w-[520px] rounded-2xl bg-[radial-gradient(circle_at_40%_30%,#ede8ff_0%,#f8f7ff_58%,#ffffff_100%)] p-8 flex flex-col justify-center">
-          <h2 className="text-3xl font-bold text-brand-600 mb-4">Vouchr.it</h2>
+          <h2 className="text-3xl font-bold text-brand-600 mb-4">Accountant AI</h2>
           <p className="text-slate-600 text-lg">Automate your Tally accounting pipeline in minutes. Zero data entry, 100% accuracy.</p>
         </div>
       </section>
       <section className="grid place-items-center p-6">
         <div className="w-full max-w-[420px]">
           <h1 className="font-heading text-4xl font-semibold text-slate-900">Create Account</h1>
-          <p className="mt-2 text-sm text-slate-500">Join Vouchr.it and streamline your accounting.</p>
+          <p className="mt-2 text-sm text-slate-500">Join Accountant AI and streamline your accounting.</p>
 
           <form onSubmit={handleSignup} className="mt-8 space-y-4">
             <div className="space-y-2">
