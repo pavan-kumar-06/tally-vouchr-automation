@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { authClient } from "@/lib/auth-client";
+import { api } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,29 +16,19 @@ export default function SignupPage() {
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
-  const { data: session } = authClient.useSession();
-
-  if (session) {
-    router.push("/dashboard");
-    return null;
-  }
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const { error } = await authClient.signUp.email({
-      email,
-      password,
-      name,
-      callbackURL: "/dashboard",
-    });
-
-    if (error) {
-      toast.error(error.message);
-    } else {
+    try {
+      await api.signup(email, password, name);
+      toast.success("Account created successfully");
       router.push("/dashboard");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Signup failed");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
@@ -53,45 +43,45 @@ export default function SignupPage() {
         <div className="w-full max-w-[420px]">
           <h1 className="font-heading text-4xl font-semibold text-slate-900">Create Account</h1>
           <p className="mt-2 text-sm text-slate-500">Join Vouchr.it and streamline your accounting.</p>
-          
+
           <form onSubmit={handleSignup} className="mt-8 space-y-4">
             <div className="space-y-2">
               <Label htmlFor="name">Full Name</Label>
-              <Input 
+              <Input
                 id="name"
-                placeholder="John Doe" 
-                value={name} 
-                onChange={(e) => setName(e.target.value)} 
-                required 
+                placeholder="John Doe"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
               />
             </div>
             <div className="space-y-2">
               <Label htmlFor="email">Email Address</Label>
-              <Input 
+              <Input
                 id="email"
-                type="email" 
-                placeholder="john@example.com" 
-                value={email} 
-                onChange={(e) => setEmail(e.target.value)} 
-                required 
+                type="email"
+                placeholder="john@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
               />
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
-              <Input 
+              <Input
                 id="password"
-                type="password" 
-                placeholder="••••••••" 
-                value={password} 
-                onChange={(e) => setPassword(e.target.value)} 
-                required 
+                type="password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
               />
             </div>
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? "Creating Account..." : "Sign Up"}
             </Button>
           </form>
-          
+
           <p className="mt-6 text-center text-sm text-slate-500">
             Already have an account?{" "}
             <Link href="/login" className="text-brand-600 font-medium hover:underline">

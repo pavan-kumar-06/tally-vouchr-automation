@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
+import { api } from "@/lib/api-client";
 
 type Props = {
   companyId: string;
@@ -123,26 +124,7 @@ function ExtractForm({
     setErr(null);
     setBusy(true);
     try {
-      const body: { filePassword?: string } = {};
-      if (passwordProtected) {
-        body.filePassword = pwd.trim();
-      }
-      const res = await fetch(`/api/statements/${statementId}/process`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body)
-      });
-      const text = await res.text();
-      if (!res.ok) {
-        let msg = "Could not start extraction";
-        try {
-          const j = JSON.parse(text) as { error?: string };
-          if (j.error) msg = j.error;
-        } catch {
-          /* */
-        }
-        throw new Error(msg);
-      }
+      await api.processStatement(statementId, passwordProtected ? pwd.trim() : undefined);
       try {
         sessionStorage.removeItem(`stmt_pdf_pwd:${statementId}`);
       } catch {
@@ -151,7 +133,8 @@ function ExtractForm({
       router.push(`/companies/${companyId}/banking`);
       router.refresh();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Failed");
+      const msg = e instanceof Error ? e.message : "Could not start extraction";
+      setErr(msg);
     } finally {
       setBusy(false);
     }

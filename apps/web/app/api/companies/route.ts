@@ -1,85 +1,42 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { member, organization, company } from "@vouchr/db";
-import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
-
-async function getOrCreateOrgId(sessionObj: any) {
-  if (sessionObj.session.activeOrganizationId) {
-    return sessionObj.session.activeOrganizationId;
-  }
-  
-  const existingMember = await db.query.member.findFirst({
-    where: eq(member.userId, sessionObj.user.id)
-  });
-  
-  if (existingMember) {
-    return existingMember.organizationId;
-  }
-  
-  // Create default org
-  const orgId = `org_${crypto.randomUUID().replaceAll("-", "")}`;
-  await db.insert(organization).values({
-    id: orgId,
-    name: "My Organization",
-    slug: `org-${crypto.randomUUID().substring(0,8)}`,
-    createdAt: new Date(),
-  });
-  
-  await db.insert(member).values({
-    id: `mem_${crypto.randomUUID().replaceAll("-", "")}`,
-    userId: sessionObj.user.id,
-    organizationId: orgId,
-    role: "owner",
-    createdAt: new Date(),
-  });
-  
-  return orgId;
-}
+import { getEnv } from "@/lib/env";
 
 export async function GET() {
-  const session = await auth.api.getSession({
-    headers: await headers()
-  });
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const orgId = await getOrCreateOrgId(session);
+  const orgId = session.session.activeOrganizationId;
+  if (!orgId) return NextResponse.json({ error: "No organization" }, { status: 400 });
 
   const companies = await db.query.company.findMany({
     where: eq(company.organizationId, orgId)
   });
-
   return NextResponse.json(companies);
 }
 
 export async function POST(request: Request) {
-  const session = await auth.api.getSession({
-    headers: await headers()
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const orgId = session.session.activeOrganizationId;
+  if (!orgId) return NextResponse.json({ error: "No organization" }, { status: 400 });
+
+  const body = (await request.json()) as Record<string, unknown>;
+  const env = getEnv();
+
+  const res = await fetch(`${env.WORKER_BASE_URL}/api/companies`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json", cookie: request.headers.get("cookie") || "" },
+    body: JSON.stringify({ ...body, orgId }),
   });
 
-  if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const orgId = await getOrCreateOrgId(session);
-  const body = await request.json() as { name?: string; tallyCompanyName?: string; tallyCompanyRemoteId?: string };
-  const { name, tallyCompanyName, tallyCompanyRemoteId } = body;
-  const id = `cmp_${crypto.randomUUID().replaceAll("-", "")}`;
-
-  await db.insert(company).values({
-    id,
-    name,
-    organizationId: orgId,
-    ownerId: session.user.id,
-    tallyCompanyName: tallyCompanyName || null,
-    tallyCompanyRemoteId: tallyCompanyRemoteId || null,
-    updatedAt: new Date(),
-    createdAt: new Date(),
-  });
-
-  return NextResponse.json({ id, name });
+  const data = await res.json();
+  return NextResponse.json(data, { status: res.status });
 }
+
+import { db } from "@/lib/db";
+import { company } from "@vouchr/db";
+import { eq } from "drizzle-orm";

@@ -9,10 +9,11 @@ const envSchema = z.object({
   R2_SECRET_ACCESS_KEY: z.string().min(1).default("local-secret-key"),
   R2_BUCKET_NAME: z.string().min(1),
   R2_PUBLIC_URL: z.string().url().or(z.literal("")).optional(),
-  WORKER_BASE_URL: z.string().url().default("http://localhost:8001"),
+  WORKER_BASE_URL: z.string().url().default("http://localhost:8000"),
   CONNECTOR_SHARED_TOKEN: z.string().min(16).default("dev-connector-token-change-me"),
   WORKER_WEBHOOK_SECRET: z.string().min(16).default("dev-worker-secret-change-me"),
-  VOUCHR_WORKER_URL: z.string().url().default("http://localhost:8001").optional(),
+  NEXT_PUBLIC_API_BASE_URL: z.string().url().default("http://localhost:8000"),
+  VOUCHR_WORKER_URL: z.string().url().default("http://localhost:8000").optional(),
   CLOUDFLARE_ACCOUNT_ID: z.string().optional(),
   CLOUDFLARE_DATABASE_ID: z.string().optional(),
   CLOUDFLARE_API_TOKEN: z.string().optional()

@@ -7,7 +7,9 @@
       "Bash(source venv/bin/activate)",
       "Bash(python -c \"from app.gemini import extract_transactions; print\\(''OK''\\)\")",
       "Bash(curl -s -H \"x-goog-api-key: AIzaSyCroXHjnZ7mzMr5HxBpo4RlRXX07eSAem0\" \"https://generativelanguage.googleapis.com/v1beta/models?key=AIzaSyCroXHjnZ7mzMr5HxBpo4RlRXX07eSAem0\")",
-      "Bash(curl -s -X POST \"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCroXHjnZ7mzMr5HxBpo4RlRXX07eSAem0\" -H 'Content-Type: application/json' -d '{\"\"\"\"contents\"\"\"\":[{\"\"\"\"parts\"\"\"\":[{\"\"\"\"text\"\"\"\":\"\"\"\"Say hello\"\"\"\"}]}]}')"
+      "Bash(curl -s -X POST \"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCroXHjnZ7mzMr5HxBpo4RlRXX07eSAem0\" -H 'Content-Type: application/json' -d '{\"\"\"\"contents\"\"\"\":[{\"\"\"\"parts\"\"\"\":[{\"\"\"\"text\"\"\"\":\"\"\"\"Say hello\"\"\"\"}]}]}')",
+      "Bash(pnpm:*)",
+      "Bash(npx drizzle-kit:*)"
     ]
   }
 }

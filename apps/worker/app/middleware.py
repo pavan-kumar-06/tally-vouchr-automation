@@ -12,14 +12,26 @@ from app.auth import decode_token
 # SSE connector events use x-connector-token header auth instead
 PUBLIC_PATHS = {
     "/health",
+    "/auth/signup",
+    "/auth/login",
+    "/auth/logout",
+    "/auth/refresh",
+    "/auth/me",
+    "/auth/health",
+    "/api/auth/signup",
+    "/api/auth/login",
+    "/api/auth/logout",
+    "/api/auth/refresh",
+    "/api/auth/me",
+    "/api/auth/health",
     "/v1/auth/link-session",
     "/v1/auth/refresh",
     "/v1/auth/logout",
     "/v1/auth/me",
-    "/v1/connector/events",       # connector uses x-connector-token, not JWT
-    "/v1/connector/sync-masters", # connector uses x-connector-token
-    "/v1/connector/complete",     # connector uses x-connector-token
-    "/v1/connector/status",       # status is polled by FE after SSE trigger
+    "/v1/connector/events",
+    "/v1/connector/sync-masters",
+    "/v1/connector/complete",
+    "/v1/connector/status",
 }
 
 

@@ -54,7 +54,7 @@ def extract_transactions_from_url(pdf_url: str, period_from: str | None, period_
                     },
                 ],
                 temperature=0,
-                max_tokens=12000,
+                max_tokens=10000,
             )
 
             raw = response.choices[0].message.content
@@ -95,7 +95,7 @@ def extract_transactions(statement_text: str, period_from: str | None, period_to
                     {"role": "user", "content": prompt},
                 ],
                 temperature=0,
-                max_tokens=12000,
+                max_tokens=10000,
             )
 
             raw = response.choices[0].message.content

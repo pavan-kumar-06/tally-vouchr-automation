@@ -6,7 +6,7 @@ compatibility_flags = ["nodejs_compat"]
 [[d1_databases]]
 binding = "DB"
 database_name = "vouchrit-db"
-database_id = "94af87cf-fa2d-4e65-b18b-e35442d1ac71"
+database_id = "b3e8802f-113e-40f2-837e-d3d4720db782"
 
 [[r2_buckets]]
 binding = "STATEMENT_BUCKET"

@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Building2, LayoutDashboard, UploadCloud, LogOut, User } from "lucide-react";
+import { Building2, LayoutDashboard, LogOut, User } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { authClient } from "@/lib/auth-client";
+import { useAuth } from "@/contexts/auth-context";
+import { api } from "@/lib/api-client";
 
 const nav = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -14,16 +15,15 @@ const nav = [
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { data: session } = authClient.useSession();
+  const { session } = useAuth();
 
   const handleLogout = async () => {
-    await authClient.signOut({
-      fetchOptions: {
-        onSuccess: () => {
-          router.push("/login");
-        },
-      },
-    });
+    try {
+      await api.logout();
+    } catch {
+      // ignore
+    }
+    router.push("/login");
   };
 
   return (
@@ -33,7 +33,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Link href="/dashboard" className="mb-10 grid h-12 w-12 place-items-center rounded-xl bg-brand-600 text-white font-bold text-xl shadow-lg ring-4 ring-white/10">
             V
           </Link>
-          
+
           <nav className="flex flex-col gap-4 flex-1">
             {nav.map((item) => {
               const Icon = item.icon;
@@ -45,8 +45,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   title={item.label}
                   className={cn(
                     "grid h-12 w-12 place-items-center rounded-xl transition-all duration-200",
-                    isActive 
-                      ? "bg-white/10 text-white ring-1 ring-white/20" 
+                    isActive
+                      ? "bg-white/10 text-white ring-1 ring-white/20"
                       : "text-slate-400 hover:bg-white/5 hover:text-slate-200"
                   )}
                 >
@@ -58,8 +58,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
           <div className="flex flex-col gap-4 border-t border-white/10 pt-6">
             <button
-               title={session?.user?.name || "Profile"}
-               className="grid h-12 w-12 place-items-center rounded-xl text-slate-400 hover:bg-white/5 hover:text-slate-200 transition-all"
+              title={session?.user?.name || "Profile"}
+              className="grid h-12 w-12 place-items-center rounded-xl text-slate-400 hover:bg-white/5 hover:text-slate-200 transition-all"
             >
               <User className="h-5 w-5" />
             </button>
@@ -72,7 +72,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </button>
           </div>
         </aside>
-        
+
         <main className="min-w-0 flex-1">
           {children}
         </main>

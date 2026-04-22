@@ -1,8 +1,8 @@
 import { headers } from "next/headers";
 import { and, eq } from "drizzle-orm";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { company, member, organization } from "@vouchr/db";
+import { getEnv } from "@/lib/env";
 
 async function getOrCreateOrgId(sessionObj: {
   user: { id: string };
@@ -40,12 +40,42 @@ async function getOrCreateOrgId(sessionObj: {
 }
 
 export async function resolveSessionOrg() {
-  const session = await auth.api.getSession({
-    headers: await headers()
+  // Use Python BE /auth/me for session (reads vouchr_access JWT cookie)
+  const headerStore = await headers();
+  const cookieHeader = headerStore.get("cookie") ?? "";
+
+  const env = getEnv();
+  let res: Response;
+  try {
+    res = await fetch(`${env.WORKER_BASE_URL}/auth/me`, {
+      headers: { cookie: cookieHeader },
+      credentials: "include",
+    });
+  } catch {
+    return null;
+  }
+
+  if (!res.ok) return null;
+
+  const sessionData = await res.json() as {
+    user: { id: string; email: string; name: string };
+    organization: { id: string; name: string; role: string };
+  };
+
+  const orgId = await getOrCreateOrgId({
+    user: { id: sessionData.user.id },
+    session: { activeOrganizationId: sessionData.organization.id },
   });
-  if (!session) return null;
-  const orgId = await getOrCreateOrgId(session);
-  return { session, orgId };
+
+  return {
+    session: sessionData as unknown as Parameters<typeof getOrCreateOrgId>[0]["session"],
+    orgId,
+    userId: sessionData.user.id,
+    email: sessionData.user.email,
+    name: sessionData.user.name,
+    orgName: sessionData.organization.name,
+    role: sessionData.organization.role,
+  };
 }
 
 export async function getCompanyForOrg(companyId: string, orgId: string) {

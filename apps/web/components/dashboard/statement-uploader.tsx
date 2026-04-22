@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, Upload } from "lucide-react";
 import { toast } from "sonner";
-import { authClient } from "@/lib/auth-client";
+import { useAuth } from "@/contexts/auth-context";
+import { api } from "@/lib/api-client";
 
 interface StatementUploaderProps {
   companyId: string;
@@ -38,18 +39,16 @@ export function StatementUploader({ companyId, onUploadComplete }: StatementUplo
   const [filePassword, setFilePassword] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
-  const { data: session } = authClient.useSession();
+  const { session } = useAuth();
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`/api/companies/${companyId}/bank-ledgers`);
-        if (!res.ok) return;
-        const data = (await res.json()) as { names: string[]; source: "BANK_PARENT" | "ALL_UNTAGGED" };
+        const data = await api.getCompanyBankLedgers(companyId);
         if (!cancelled) {
           setBankOptions(data.names ?? []);
-          setBankSource(data.source ?? null);
+          setBankSource((data as any).source ?? null);
         }
       } catch {
         /* ignore */
@@ -75,15 +74,10 @@ export function StatementUploader({ companyId, onUploadComplete }: StatementUplo
       if (!session?.user) return;
 
       if (!opts.skipDuplicateModal) {
-        const dupRes = await fetch(
-          `/api/companies/${companyId}/statements/duplicate-check?filename=${encodeURIComponent(file.name)}`
-        );
-        if (dupRes.ok) {
-          const dup = (await dupRes.json()) as { exists: boolean };
-          if (dup.exists) {
-            setDuplicateOpen(true);
-            return;
-          }
+        const dup = await api.checkDuplicateStatement(companyId, file.name);
+        if (dup.exists) {
+          setDuplicateOpen(true);
+          return;
         }
       }
 
@@ -92,29 +86,15 @@ export function StatementUploader({ companyId, onUploadComplete }: StatementUplo
       setDetailsOpen(false);
 
       try {
-        const urlRes = await fetch("/api/statements/upload-url", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
+        const { statementId, uploadUrl } = await api.createStatementUpload({
             companyId,
-            userId: session.user.id,
             filename: file.name,
             contentType: file.type || "application/pdf",
             bankLedgerName,
             extractionPeriodFrom: periodFrom || undefined,
             extractionPeriodTo: periodTo || todayIso(),
             passwordProtected
-          })
-        });
-
-        if (!urlRes.ok) {
-          throw new Error("Failed to get upload URL");
-        }
-
-        const { statementId, uploadUrl } = (await urlRes.json()) as {
-          statementId: string;
-          uploadUrl: string;
-        };
+          });
 
         if (passwordProtected && filePassword.trim()) {
           try {
@@ -136,23 +116,15 @@ export function StatementUploader({ companyId, onUploadComplete }: StatementUplo
           throw new Error("Cloud upload failed");
         }
 
-        const processRes = await fetch(`/api/statements/${statementId}/process`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            filePassword: passwordProtected ? filePassword.trim() : undefined
-          })
+        // Fire and forget — polling is handled separately in the UI
+        api.processStatement(statementId, passwordProtected ? filePassword.trim() : undefined).catch(() => {
+          // Silently ignored — UI will show stale status until refresh
         });
-        if (!processRes.ok) {
-          const text = await processRes.text();
-          throw new Error(text || "Failed to start extraction");
-        }
 
-        toast.success("Statement uploaded and sent for extraction.");
-        router.push(`/companies/${companyId}/banking`);
-        router.refresh();
-        onUploadComplete?.();
+        toast.success("Statement uploaded. Processing in background.");
         resetForm();
+        onUploadComplete?.();
+        router.refresh();
       } catch (error) {
         console.error("[uploader]", error);
         toast.error(error instanceof Error ? error.message : "Upload failed");
@@ -181,15 +153,10 @@ export function StatementUploader({ companyId, onUploadComplete }: StatementUplo
     // Check for duplicate filename immediately before showing details
     void (async () => {
       try {
-        const dupRes = await fetch(
-          `/api/companies/${companyId}/statements/duplicate-check?filename=${encodeURIComponent(file.name)}`
-        );
-        if (dupRes.ok) {
-          const dup = (await dupRes.json()) as { exists: boolean };
-          if (dup.exists) {
-            setDuplicateOpen(true);
-            return; // Don't open details yet, wait for user confirmation
-          }
+        const dup = await api.checkDuplicateStatement(companyId, file.name);
+        if (dup.exists) {
+          setDuplicateOpen(true);
+          return; // Don't open details yet, wait for user confirmation
         }
       } catch {
         /* ignore - proceed with upload */

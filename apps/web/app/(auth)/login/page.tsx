@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { authClient } from "@/lib/auth-client";
+import { api } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,28 +14,19 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
-  const { data: session } = authClient.useSession();
-
-  if (session) {
-    router.push("/dashboard");
-    return null;
-  }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const { error } = await authClient.signIn.email({
-      email,
-      password,
-      callbackURL: "/dashboard",
-    });
-
-    if (error) {
-      toast.error(error.message);
-    } else {
+    try {
+      await api.login(email, password);
+      toast.success("Logged in successfully");
       router.push("/dashboard");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Login failed");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
@@ -47,35 +38,35 @@ export default function LoginPage() {
         <div className="w-full max-w-[420px]">
           <h1 className="font-heading text-4xl font-semibold text-slate-900">Log In to VouchrIt</h1>
           <p className="mt-2 text-sm text-slate-500">Enter your credentials to access your dashboard</p>
-          
+
           <form onSubmit={handleLogin} className="mt-8 space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email Address</Label>
-              <Input 
+              <Input
                 id="email"
-                type="email" 
-                placeholder="john@example.com" 
-                value={email} 
-                onChange={(e) => setEmail(e.target.value)} 
-                required 
+                type="email"
+                placeholder="john@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
               />
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
-              <Input 
+              <Input
                 id="password"
-                type="password" 
-                placeholder="••••••••" 
-                value={password} 
-                onChange={(e) => setPassword(e.target.value)} 
-                required 
+                type="password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
               />
             </div>
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? "Logging in..." : "Log In"}
             </Button>
           </form>
-          
+
           <div className="mt-4 flex justify-between text-sm">
             <Link href="#" className="text-brand-600 hover:underline">
               Log in with OTP
@@ -84,9 +75,9 @@ export default function LoginPage() {
               Forgot Password
             </Link>
           </div>
-          
+
           <p className="mt-8 text-center text-sm text-slate-500">
-            Don't have an account?{" "}
+            Don&apos;t have an account?{" "}
             <Link href="/signup" className="text-brand-600 font-medium hover:underline">
               Sign Up
             </Link>

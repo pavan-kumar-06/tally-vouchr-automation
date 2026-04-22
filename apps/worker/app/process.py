@@ -1,17 +1,14 @@
 from __future__ import annotations
 
 import io
-import json
 from datetime import datetime
 
-import httpx
 import pdfplumber
 
 from app.config import settings
 from app.gemini import extract_transactions
-from app.r2_client import get_r2_client
 from app.schemas import ProcessStatementRequest, ProcessStatementResponse, StatementEntry, StatementJson
-
+from app.storage import storage
 
 SUPPORTED_DATE_FORMATS = (
     "%Y-%m-%d",
@@ -52,12 +49,10 @@ def extract_pdf_text(file_bytes: bytes, password: str | None = None) -> str:
 
     with pdfplumber.open(io.BytesIO(file_bytes), password=password) as pdf:
         for page in pdf.pages:
-            # Extract text with layout preservation
             page_text = page.extract_text()
             if page_text:
                 text_parts.append(page_text)
 
-            # Also extract tables for structured bank statement data
             tables = page.extract_tables()
             for table in tables:
                 for row in table:
@@ -103,43 +98,16 @@ def normalize_transactions(raw: list[dict]) -> list[StatementEntry]:
     return normalized
 
 
-async def notify_web_app(payload: ProcessStatementResponse):
-    url = f"{settings.web_internal_base_url}/api/internal/statements/{payload.statement_id}/processed"
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.post(
-            url,
-            headers={"x-worker-secret": settings.worker_webhook_secret},
-            json={
-                "statementId": payload.statement_id,
-                "resultR2Key": payload.result_r2_key,
-                "entryCount": payload.entry_count,
-                "status": payload.status,
-                "processingError": payload.processing_error,
-            },
-        )
-        response.raise_for_status()
-
-
 async def process_statement(request: ProcessStatementRequest) -> ProcessStatementResponse:
     print(f"[worker] Starting processing for statement: {request.statement_id}")
-    r2 = get_r2_client()
     result_key = f"statements/{request.company_id}/{request.statement_id}/extracted.json"
 
     try:
-        print(f"[worker] Fetching source file from R2: {request.source_r2_key}")
-        source_obj = r2.get_object(Bucket=settings.r2_bucket_name, Key=request.source_r2_key)
-        source_bytes = source_obj["Body"].read()
-        print(f"[worker] Source file fetched. Size: {len(source_bytes)} bytes")
+        print(f"[worker] Reading source file: {request.source_r2_key}")
+        source_bytes = storage.get_bytes(request.source_r2_key)
 
         print("[worker] Extracting text from PDF...")
         statement_text = extract_pdf_text(source_bytes, password=request.file_password)
-        print(f"[worker] Text extraction complete. Length: {len(statement_text)} chars")
-
-        # Save extracted text locally for debugging
-        debug_path = f"/tmp/extracted_{request.statement_id}.txt"
-        with open(debug_path, "w", encoding="utf-8") as f:
-            f.write(statement_text)
-        print(f"[worker] Saved extracted text to {debug_path}")
 
         print("[worker] Sending text to OpenRouter AI for extraction...")
         raw_transactions = extract_transactions(
@@ -147,11 +115,8 @@ async def process_statement(request: ProcessStatementRequest) -> ProcessStatemen
             period_from=request.extraction_period_from,
             period_to=request.extraction_period_to,
         )
-        print(f"[worker] OpenRouter returned {len(raw_transactions)} raw transactions")
 
-        print("[worker] Normalizing transactions...")
         entries = normalize_transactions(raw_transactions)
-        print(f"[worker] Normalization complete. {len(entries)} valid transactions found")
 
         payload = StatementJson(
             statement_id=request.statement_id,
@@ -165,36 +130,20 @@ async def process_statement(request: ProcessStatementRequest) -> ProcessStatemen
             entries=entries,
         )
 
-        print(f"[worker] Saving extracted JSON to R2: {result_key}")
-        r2.put_object(
-            Bucket=settings.r2_bucket_name,
-            Key=result_key,
-            Body=json.dumps(payload.model_dump(mode="json"), ensure_ascii=False).encode("utf-8"),
-            ContentType="application/json",
-        )
+        storage.put_json(result_key, payload.model_dump(mode="json"))
 
-        response_payload = ProcessStatementResponse(
+        return ProcessStatementResponse(
             statement_id=request.statement_id,
             result_r2_key=result_key,
             entry_count=len(entries),
             status="REVIEW",
         )
-        print(f"[worker] Successfully processed statement: {request.statement_id}")
     except Exception as exc:
         print(f"[worker] ERROR processing statement {request.statement_id}: {str(exc)}")
-        response_payload = ProcessStatementResponse(
+        return ProcessStatementResponse(
             statement_id=request.statement_id,
             result_r2_key=result_key,
             entry_count=0,
             status="FAILED",
             processing_error=str(exc),
         )
-
-    print(f"[worker] Notifying web app callback for {request.statement_id}...")
-    try:
-        await notify_web_app(response_payload)
-        print(f"[worker] Web app notified successfully")
-    except Exception as notify_exc:
-        print(f"[worker] FAILED to notify web app: {str(notify_exc)}")
-
-    return response_payload

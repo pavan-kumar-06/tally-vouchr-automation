@@ -67,6 +67,9 @@ pnpm install
 
 ```bash
 cp apps/web/.env.example apps/web/.env.local
+# fill CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_DATABASE_ID / CLOUDFLARE_API_TOKEN
+# then run D1 schema migration once:
+CLOUDFLARE_API_TOKEN=... ./scripts/migrate-d1.sh
 pnpm --filter @vouchr/web dev
 ```
 
@@ -100,3 +103,8 @@ go run ./cmd/vouchr-connector sync-masters
 - [ ] Production auth flows/screens
 - [ ] Exact Tally XML mapping finalization
 - [ ] End-to-end integration tests
+
+## Production Ops
+
+- Lightsail + D1 deployment/migration runbook:
+  - `docs/LIGHTSAIL_D1_RUNBOOK.md`

@@ -1,12 +1,7 @@
 "use client";
 
-import { JWTLinkEffect } from "@/components/jwt-auth-provider";
+import { AuthProvider } from "@/contexts/auth-context";
 
 export function Providers({ children }: { children: React.ReactNode }) {
-  return (
-    <>
-      <JWTLinkEffect />
-      {children}
-    </>
-  );
+  return <AuthProvider>{children}</AuthProvider>;
 }

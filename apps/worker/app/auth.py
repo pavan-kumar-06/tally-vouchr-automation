@@ -1,118 +1,114 @@
-"""
-JWT-based auth for Vouchr Python BE.
-- Issues JWTs on login/link-session
-- Validates JWTs on all protected endpoints
-- Refresh tokens for silent re-auth
-"""
-import jwt
+from __future__ import annotations
+
+import hashlib
+import secrets
 import time
 import uuid
-from datetime import datetime, timedelta, timezone
-from typing import Literal
+from typing import Any
+
+import jwt
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError
+
 from app.config import settings
 
 JWT_ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRY_MINUTES = 15
-REFRESH_TOKEN_EXPIRY_DAYS = 7
+ACCESS_COOKIE_NAME = "vouchr_access"
+REFRESH_COOKIE_NAME = "vouchr_refresh"
+
+_password_hasher = PasswordHasher()
+
+
+def now_unix() -> int:
+    return int(time.time())
+
+
+def now_ms() -> int:
+    return int(time.time() * 1000)
 
 
 def _get_secret() -> str:
     return settings.jwt_secret
 
 
-def create_access_token(
-    user_id: str,
-    email: str,
-    org_id: str,
-    role: str = "user",
-) -> str:
-    """Create a short-lived access JWT (15 min)."""
+def hash_password(password: str) -> str:
+    return _password_hasher.hash(password)
+
+
+def verify_password(password: str, hashed_password: str | None) -> bool:
+    if not hashed_password:
+        return False
+    try:
+        return _password_hasher.verify(hashed_password, password)
+    except VerifyMismatchError:
+        return False
+    except Exception:
+        return False
+
+
+def create_access_token(user_id: str, email: str, org_id: str, role: str = "owner") -> str:
     payload = {
         "sub": user_id,
         "email": email,
         "org_id": org_id,
         "role": role,
         "type": "access",
-        "iat": int(time.time()),
-        "exp": int(time.time()) + ACCESS_TOKEN_EXPIRY_MINUTES * 60,
+        "iat": now_unix(),
+        "exp": now_unix() + settings.access_token_expiry_minutes * 60,
         "jti": uuid.uuid4().hex,
     }
     return jwt.encode(payload, _get_secret(), algorithm=JWT_ALGORITHM)
 
 
-def create_refresh_token(user_id: str) -> str:
-    """Create a long-lived refresh JWT (7 days)."""
-    payload = {
-        "sub": user_id,
-        "type": "refresh",
-        "iat": int(time.time()),
-        "exp": int(time.time()) + REFRESH_TOKEN_EXPIRY_DAYS * 86400,
-        "jti": uuid.uuid4().hex,
-    }
-    return jwt.encode(payload, _get_secret(), algorithm=JWT_ALGORITHM)
-
-
-def decode_token(token: str) -> dict | None:
-    """Decode and validate a JWT. Returns payload or None if invalid/expired."""
+def decode_token(token: str) -> dict[str, Any] | None:
     try:
-        return jwt.decode(token, _get_secret(), algorithms=[JWT_ALGORITHM])
+        payload = jwt.decode(token, _get_secret(), algorithms=[JWT_ALGORITHM])
+        if not isinstance(payload, dict):
+            return None
+        return payload
     except jwt.ExpiredSignatureError:
         return None
     except jwt.InvalidTokenError:
         return None
 
 
-def create_token_pair(
-    user_id: str,
-    email: str,
-    org_id: str,
-    role: str = "user",
-) -> tuple[str, str]:
-    """Create both access + refresh tokens."""
-    access = create_access_token(user_id, email, org_id, role)
-    refresh = create_refresh_token(user_id)
-    return access, refresh
+def generate_refresh_token() -> str:
+    return secrets.token_urlsafe(64)
 
 
-def set_jwt_cookies(
-    response,
-    access_token: str,
-    refresh_token: str,
-    domain: str = "",  # empty = no domain attr (dev), ".my-ai.in" for production
-    secure: bool = False,
-):
-    """
-    Attach JWT cookies to a response object (FastAPI/Starlette).
+def hash_refresh_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
-    - local dev: domain="", no Domain attr set, works on localhost
-    - production: domain=".my-ai.in", works across accountant.my-ai.in / aiaccountantbe.my-ai.in
-    """
-    cookie_kwargs = {
-        "secure": secure,
+
+def _cookie_kwargs() -> dict[str, Any]:
+    kwargs: dict[str, Any] = {
+        "secure": settings.cookie_secure,
         "httponly": True,
-        "samesite": "Lax",
+        "samesite": settings.cookie_samesite,
+        "path": "/",
     }
-    if domain:
-        cookie_kwargs["domain"] = domain
+    if settings.cookie_domain:
+        kwargs["domain"] = settings.cookie_domain
+    return kwargs
 
+
+def set_auth_cookies(response: Any, access_token: str, refresh_token: str) -> None:
+    cookie_kwargs = _cookie_kwargs()
     response.set_cookie(
-        key="vouchr_access",
+        key=ACCESS_COOKIE_NAME,
         value=access_token,
-        max_age=ACCESS_TOKEN_EXPIRY_MINUTES * 60,
+        max_age=settings.access_token_expiry_minutes * 60,
         **cookie_kwargs,
     )
     response.set_cookie(
-        key="vouchr_refresh",
+        key=REFRESH_COOKIE_NAME,
         value=refresh_token,
-        max_age=REFRESH_TOKEN_EXPIRY_DAYS * 86400,
+        max_age=settings.refresh_token_expiry_days * 86400,
         **cookie_kwargs,
     )
 
 
-def clear_jwt_cookies(response, domain: str = "", secure: bool = False):
-    """Clear both JWT cookies on logout."""
-    kwargs = {"secure": secure, "httponly": True, "samesite": "Lax"}
-    if domain:
-        kwargs["domain"] = domain
-    response.delete_cookie(key="vouchr_access", **kwargs)
-    response.delete_cookie(key="vouchr_refresh", **kwargs)
+def clear_auth_cookies(response: Any) -> None:
+    kwargs = _cookie_kwargs()
+    response.delete_cookie(key=ACCESS_COOKIE_NAME, **kwargs)
+    response.delete_cookie(key=REFRESH_COOKIE_NAME, **kwargs)

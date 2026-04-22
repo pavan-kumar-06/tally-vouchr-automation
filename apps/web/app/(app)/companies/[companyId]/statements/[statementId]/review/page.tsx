@@ -1,13 +1,7 @@
-import { and, eq, ne } from "drizzle-orm";
 import { ReviewGrid } from "@/components/dashboard/review-grid";
-import { db } from "@/lib/db";
-import { tallyMaster, statement, company } from "@vouchr/db";
-import { getStatementEntries } from "@/lib/r2";
 import { notFound } from "next/navigation";
-import type { StatementEntry } from "@vouchr/contracts";
-
-const CANONICAL_VOUCHERS = ["Payment", "Receipt", "Contra"] as const;
-const BANK_PARENT = "Bank Accounts";
+import { getEnv } from "@/lib/env";
+import { cookies } from "next/headers";
 
 export default async function ReviewPage({
   params
@@ -15,76 +9,38 @@ export default async function ReviewPage({
   params: Promise<{ companyId: string; statementId: string }>;
 }) {
   const { companyId, statementId } = await params;
+  const env = getEnv();
+  const cookieStore = await cookies();
+  const cookieHeader = cookieStore.toString();
 
-  const statementEntity = await db.query.statement.findFirst({
-    where: and(eq(statement.id, statementId), eq(statement.companyId, companyId))
+  const res = await fetch(`${env.WORKER_BASE_URL}/api/statements/${statementId}/review-context`, {
+    headers: { Cookie: cookieHeader },
+    cache: "no-store"
   });
 
-  if (!statementEntity) return notFound();
-
-  const companyEntity = await db.query.company.findFirst({
-    where: eq(company.id, companyId)
-  });
-
-  const nonBankLedgers = await db
-    .select({ name: tallyMaster.name })
-    .from(tallyMaster)
-    .where(
-      and(
-        eq(tallyMaster.companyId, companyId),
-        eq(tallyMaster.type, "LEDGER"),
-        eq(tallyMaster.isActive, true),
-        ne(tallyMaster.sourceParent, BANK_PARENT)
-      )
-    );
-
-  const fallbackWhere = statementEntity.bankLedgerName
-    ? and(
-        eq(tallyMaster.companyId, companyId),
-        eq(tallyMaster.type, "LEDGER"),
-        eq(tallyMaster.isActive, true),
-        ne(tallyMaster.name, statementEntity.bankLedgerName)
-      )
-    : and(eq(tallyMaster.companyId, companyId), eq(tallyMaster.type, "LEDGER"), eq(tallyMaster.isActive, true));
-
-  const counterpartyLedgers =
-    nonBankLedgers.length > 0
-      ? nonBankLedgers
-      : await db.select({ name: tallyMaster.name }).from(tallyMaster).where(fallbackWhere);
-
-  const voucherRows = await db
-    .select({ name: tallyMaster.name })
-    .from(tallyMaster)
-    .where(and(eq(tallyMaster.companyId, companyId), eq(tallyMaster.type, "VOUCHER_TYPE"), eq(tallyMaster.isActive, true)));
-
-  const normalized = (s: string) => s.trim().toUpperCase();
-  const matched = CANONICAL_VOUCHERS.filter((c) =>
-    voucherRows.some((v: { name: string }) => normalized(v.name) === normalized(c))
-  );
-  const voucherTypes = matched.length > 0 ? [...matched] : [...CANONICAL_VOUCHERS];
-
-  let entries: StatementEntry[] = [];
-  if (statementEntity.resultR2Key) {
-    try {
-      const result = await getStatementEntries(statementEntity.resultR2Key);
-      entries = Array.isArray(result?.entries) ? (result.entries as StatementEntry[]) : [];
-    } catch {
-      entries = [];
+  if (!res.ok) {
+    if (res.status === 401) {
+      const { redirect } = await import("next/navigation");
+      redirect("/login");
     }
+    if (res.status === 404) return notFound();
+    throw new Error(`Failed to load review context: ${res.statusText}`);
   }
 
-  const ledgerNames = counterpartyLedgers.map((item: { name: string }) => item.name);
+  const data = await res.json();
 
   return (
     <ReviewGrid
       companyId={companyId}
       statementId={statementId}
-      bankLedgerName={statementEntity.bankLedgerName}
-      companyName={companyEntity?.tallyCompanyName || companyEntity?.name || ""}
-      tallyRemoteId={companyEntity?.tallyCompanyRemoteId || ""}
-      entries={entries}
-      ledgers={ledgerNames}
-      voucherTypes={voucherTypes}
+      bankLedgerName={data.statement?.bankLedgerName}
+      filename={data.statement?.filename}
+      status={data.statement?.status}
+      companyName={data.companyName || ""}
+      tallyRemoteId={data.tallyRemoteId || ""}
+      entries={data.entries || []}
+      ledgers={data.ledgers || []}
+      voucherTypes={data.voucherTypes || []}
     />
   );
 }
