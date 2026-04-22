@@ -37,6 +37,7 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250610.0",
+    "@types/better-sqlite3": "^7.6.12",
     "@types/react": "^19.1.5",
     "@types/react-dom": "^19.1.5",
     "autoprefixer": "^10.4.20",
