@@ -132,6 +132,21 @@ export const pendingSync = sqliteTable(
   })
 );
 
+export const waitlist = sqliteTable(
+  "waitlist",
+  {
+    id: text("id").primaryKey(),
+    email: text("email").notNull().unique(),
+    name: text("name"),
+    company: text("company"),
+    role: text("role"),
+    createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()).notNull()
+  },
+  (table) => ({
+    emailIdx: uniqueIndex("waitlist_email_idx").on(table.email)
+  })
+);
+
 
 export const companyRelations = relations(company, ({ many, one }) => ({
   owner: one(user, {
