@@ -26,9 +26,9 @@ export async function joinWaitlist(prevState: WaitlistState, formData: FormData)
   try {
     const env = getEnv();
     const apiBase = env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000";
-    // Strip trailing slashes and /api if present, then add /api/public/waitlist
+    // Strip trailing slashes and /api if present, then add /api/waitlist
     const cleanBase = apiBase.replace(/\/api$/, "").replace(/\/$/, "");
-    const endpoint = `${cleanBase}/api/public/waitlist`;
+    const endpoint = `${cleanBase}/api/waitlist`;
 
     console.log("Sending waitlist data to:", endpoint, rawData);
 
