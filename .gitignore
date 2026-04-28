@@ -27,6 +27,9 @@ apps/worker/venv
 apps/worker/__pycache__
 apps/worker/*.pyc
 
+# Local object storage (zvec dbs, R2 cache)
+apps/worker/.local-objects
+
 # Build artifacts
 apps/connector/bin
 *.db

@@ -1,80 +1,124 @@
-# Vouchr.it Monorepo (SaaS Blueprint)
+# AI Accounting Pipeline
 
-Monorepo implementation for the high-throughput AI accounting pipeline:
+AI-powered accounting automation platform. Extracts transaction data from bank PDFs, intelligently maps entries to ledger accounts using semantic vector search, and pushes vouchers to Tally ERP — with full audit trail and review workflow.
 
-- Next.js 15 SaaS web app (`apps/web`)
-- FastAPI Gemini worker (`apps/worker`)
-- Golang desktop connector (`apps/connector`)
-- Shared Drizzle schema (`packages/db`)
-- Shared JSON contracts (`packages/contracts`)
+## Architecture
 
-This setup follows your architecture decisions and borrows selective patterns from Cloudflare SaaS starters (D1 + R2 + Drizzle + modular app boundaries), without copying blindly.
+### Phase 1 — Statement Extraction
+
+1. **Connector** (`sync-masters`) pushes ledgers/voucher types from Tally to the API
+2. **Web app** creates a statement record + presigned R2 URL for PDF upload
+3. **Web app** triggers the FastAPI worker to process the statement
+4. **Worker** reads PDF from R2 → OpenRouter/Gemini extracts transactions → normalized JSON → R2
+5. **Review UI** loads entries in a virtualized grid; user edits and saves
+6. **Connector** (`push-vouchers`) sends XML to Tally
+
+### Phase 2 — Intelligent Ledger Mapping (zvec + Gemini)
+
+Each accepted transaction → ledger mapping is stored as a **768-dimensional embedding vector** in **zvec** (Alibaba's in-process vector database). When a new transaction arrives, it is embedded using Gemini and similarity search finds the closest stored mapping vectors — the associated ledger is suggested to the user.
+
+```
+Transaction Narration
+        │
+        ▼
+┌───────────────────┐
+│  Gemini Embedding │  (gemini-embedding-exp, 768-dim)
+└───────────────────┘
+        │
+        ▼
+┌───────────────────────┐     ┌──────────────────────────────┐
+│         zvec           │◀───▶│  Ledger Mapping Collection    │
+│  (per-company store)  │     │  (accepted txn→ledger vectors)│
+└───────────────────────┘     └──────────────────────────────┘
+        │
+        ▼
+┌────────────────────────────────────┐
+│  Top-K Ledger Suggestions           │
+│  ranked by cosine similarity        │
+│  → User accepts / rejects           │
+└────────────────────────────────────┘
+```
+
+Over time, the vector store grows with accepted mappings — making suggestions progressively more accurate.
 
 ## Repo Layout
 
-```text
+```
 apps/
-  web/        # Next.js 15 App Router, Better Auth, APIs, review UI
-  worker/     # FastAPI + Gemini extraction + R2 writeback + webhook callback
-  connector/  # Go CLI (sync-masters, push-vouchers)
+  web/        Next.js 15.5 App Router — Dashboard, banking feeds, review UI
+  worker/     FastAPI + OpenRouter/Gemini — PDF extraction, R2 storage, webhook callbacks
+  connector/  Go CLI — sync-masters, push-vouchers for Tally ERP
 packages/
-  db/         # Drizzle schema (auth/org + companies + masters + statements)
-  contracts/  # Zod schemas for statement JSON + webhook payloads
+  db/         Drizzle schema — auth/org + companies + masters + statements
+  contracts/  Zod schemas — statement JSON & webhook payloads
 ```
 
-## Core Flow
+## Tech Stack
 
-1. Connector runs `sync-masters` and pushes ledgers/voucher types to `/api/connector/sync-masters`.
-2. Web app creates statement row + presigned URL for PDF upload (`/api/statements/upload-url`).
-3. Web app triggers worker (`/api/statements/:id/process`).
-4. Worker reads PDF from R2, calls Gemini, normalizes JSON, writes `extracted.json` to R2.
-5. Worker calls web internal webhook (`/api/internal/statements/:id/processed`).
-6. Review page loads entries in virtualized grid (TanStack + Zustand), user edits, clicks save.
-7. Connector runs `push-vouchers --statement-id=...` and pushes XML to Tally.
+| Layer | Technology |
+|---|---|
+| Web | Next.js 15.5, Better Auth, TanStack Table, Zustand |
+| Worker API | FastAPI, Pydantic, OpenRouter, Gemini |
+| Database | Cloudflare D1 (SQLite), Drizzle ORM |
+| Object Storage | Cloudflare R2 (S3-compatible) |
+| Vector Store | **zvec** (in-process vector DB by Alibaba) |
+| Embeddings | Google Gemini `gemini-embedding-exp` (768-dim) |
+| Connector | Go CLI → Tally XML API |
+| Deployment | Cloudflare Workers (web), FastAPI on Lightsail |
 
-## Credentials Required
+## Credential Setup
 
 ### Cloudflare
-- `R2_ACCOUNT_ID`
-- `R2_ACCESS_KEY_ID`
-- `R2_SECRET_ACCESS_KEY`
-- `R2_BUCKET_NAME` (recommended: `vouchrit-data`)
-- D1 database id/name for production binding (`wrangler.toml`)
+```bash
+R2_ACCOUNT_ID=your_r2_account_id
+R2_ACCESS_KEY_ID=your_access_key
+R2_SECRET_ACCESS_KEY=your_secret_key
+R2_BUCKET_NAME=vouchrit-data
+CLOUDFLARE_ACCOUNT_ID=your_cloudflare_account_id
+CLOUDFLARE_DATABASE_ID=your_d1_database_id
+CLOUDFLARE_API_TOKEN=your_cloudflare_api_token
+```
 
 ### Auth
-- `BETTER_AUTH_SECRET`
-- `BETTER_AUTH_URL`
+```bash
+BETTER_AUTH_SECRET=generate_32_char_random_string
+BETTER_AUTH_URL=https://your-domain.com
+```
 
-### Worker/Integration
-- `GEMINI_API_KEY`
-- `WORKER_WEBHOOK_SECRET` (same value in web + worker)
-- `WORKER_BASE_URL` (web -> worker internal URL)
+### Worker & Integrations
+```bash
+GEMINI_API_KEY=your_gemini_api_key
+OPENROUTER_API_KEY=your_openrouter_api_key
+WORKER_WEBHOOK_SECRET=same_value_in_web_and_worker
+WORKER_BASE_URL=http://localhost:8001
+CONNECTOR_SHARED_TOKEN=same_in_web_and_connector
+```
 
 ### Connector
-- `CONNECTOR_SHARED_TOKEN` (same in web + connector)
-- `VOUCHR_COMPANY_ID` (for each mapped local connector instance)
-- `TALLY_BASE_URL` (default: `http://localhost:9000`)
+```bash
+VOUCHR_API_BASE_URL=https://your-domain.com
+VOUCHR_CONNECTOR_TOKEN=same_as_web_env
+VOUCHR_COMPANY_ID=company_uuid
+TALLY_BASE_URL=http://localhost:9000
+```
 
-## Local Dev
+## Local Dev Setup
 
 ### 1) Install dependencies
-
 ```bash
 pnpm install
 ```
 
 ### 2) Web app
-
 ```bash
 cp apps/web/.env.example apps/web/.env.local
-# fill CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_DATABASE_ID / CLOUDFLARE_API_TOKEN
-# then run D1 schema migration once:
+# fill in CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_DATABASE_ID / CLOUDFLARE_API_TOKEN
+# run D1 schema migration:
 CLOUDFLARE_API_TOKEN=... ./scripts/migrate-d1.sh
 pnpm --filter @vouchr/web dev
 ```
 
-### 3) Worker
-
+### 3) Worker (FastAPI)
 ```bash
 cd apps/worker
 cp .env.example .env
@@ -82,8 +126,7 @@ uv sync
 uv run uvicorn app.main:app --reload --port 8001
 ```
 
-### 4) Connector
-
+### 4) Connector (Go CLI)
 ```bash
 cd apps/connector
 export VOUCHR_API_BASE_URL=http://localhost:3000
@@ -92,19 +135,21 @@ export VOUCHR_COMPANY_ID=<company-id>
 go run ./cmd/vouchr-connector sync-masters
 ```
 
-## Current Status
+### Ledger Mapping (Phase 2)
 
-- [x] Monorepo scaffolding
-- [x] Multi-tenant schema and statement model
-- [x] Worker extraction prompt + strict JSON normalization
-- [x] Desktop-first dashboard/banking/review UI with matching design language
-- [x] Virtualized review grid with local dirty-state save
-- [x] Connector command skeletons for Tally sync/push
-- [ ] Production auth flows/screens
-- [ ] Exact Tally XML mapping finalization
-- [ ] End-to-end integration tests
+Vector store initializes per-company at runtime. Accepted transaction → ledger mappings are embedded using Gemini and stored in **zvec**:
 
-## Production Ops
+- **Storage path**: `./.local-objects/zvec/{company_id}.zvec`
+- **Embedding model**: Gemini `gemini-embedding-exp` (768-dim vectors)
+- **Vector DB**: [zvec](https://github.com/alibaba/zvec) by Alibaba — in-process, WAL-persisted
 
-- Lightsail + D1 deployment/migration runbook:
-  - `docs/LIGHTSAIL_D1_RUNBOOK.md`
+## Completed Features
+
+- Monorepo scaffolding with pnpm workspaces
+- Multi-tenant schema and statement model
+- PDF extraction pipeline with OpenRouter/Gemini fallback
+- R2 storage integration for PDFs and extracted JSON
+- Desktop-first dashboard/banking/review UI
+- Virtualized review grid with local dirty-state save
+- Connector commands for Tally sync/push
+- Phase 2: Ledger mapping via zvec + Gemini embeddings
